@@ -111,9 +111,9 @@ describe('Orchestrator', () => {
       
       mockGitManager.ensureRepository.mockResolvedValue();
       
-      // Mock claude-code version check
+      // Mock claude version check
       orchestrator.executeCommand = jest.fn().mockResolvedValue({
-        stdout: 'claude-code version 1.0.0',
+        stdout: 'claude version 1.0.0',
         stderr: '',
         code: 0
       });
@@ -125,12 +125,12 @@ describe('Orchestrator', () => {
     it('should validate environment successfully', async () => {
       await expect(orchestrator.validateEnvironment()).resolves.not.toThrow();
       
-      expect(orchestrator.executeCommand).toHaveBeenCalledWith('claude-code', ['--version'], { timeout: 10000 });
+      expect(orchestrator.executeCommand).toHaveBeenCalledWith('claude', ['--version'], { timeout: 10000 });
       expect(mockValidator.validateAll).toHaveBeenCalled();
       expect(mockGitManager.ensureRepository).toHaveBeenCalled();
     });
     
-    it('should throw error if claude-code is not available', async () => {
+    it('should throw error if claude is not available', async () => {
       orchestrator.executeCommand.mockRejectedValue(new Error('Command not found'));
       
       await expect(orchestrator.validateEnvironment()).rejects.toThrow('Claude Code CLI not found');

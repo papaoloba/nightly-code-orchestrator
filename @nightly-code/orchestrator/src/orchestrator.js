@@ -140,7 +140,7 @@ class Orchestrator extends EventEmitter {
     
     // Check if Claude Code is available
     try {
-      const result = await this.executeCommand('claude-code', ['--version'], { timeout: 10000 });
+      const result = await this.executeCommand('claude', ['--version'], { timeout: 10000 });
       this.logger.info('Claude Code version', { version: result.stdout.trim() });
     } catch (error) {
       throw new Error('Claude Code CLI not found. Please install claude-code first.');
@@ -314,7 +314,7 @@ class Orchestrator extends EventEmitter {
     return new Promise((resolve, reject) => {
       const args = ['--non-interactive'];
       
-      const child = spawn('claude-code', args, {
+      const child = spawn('claude', args, {
         cwd: options.workingDir || this.options.workingDir,
         stdio: ['pipe', 'pipe', 'pipe']
       });

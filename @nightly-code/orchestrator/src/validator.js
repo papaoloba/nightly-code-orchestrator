@@ -881,14 +881,14 @@ class Validator {
     try {
       // Check Claude Code CLI
       try {
-        const claudeVersion = await this.executeCommand('claude-code', ['--version']);
+        const claudeVersion = await this.executeCommand('claude', ['--version']);
         this.options.logger.debug('Claude Code version', { version: claudeVersion.stdout.trim() });
       } catch (error) {
         result.valid = false;
         result.errors.push({
           type: 'claude_code_not_found',
-          message: 'claude-code CLI not found in PATH',
-          path: 'claude-code'
+          message: 'claude CLI not found in PATH',
+          path: 'claude'
         });
       }
       
