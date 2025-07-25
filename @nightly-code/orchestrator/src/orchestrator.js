@@ -96,10 +96,12 @@ class Orchestrator extends EventEmitter {
   
   async run() {
     try {
-      this.logger.info('Starting orchestration session', {
-        sessionId: this.state.sessionId,
-        options: this.options
-      });
+      this.logger.info('');
+      this.logger.info('🚀 Starting Nightly Code Orchestration Session');
+      this.logger.info('═══════════════════════════════════════════════');
+      this.logger.info(`📋 Session ID: ${this.state.sessionId}`);
+      this.logger.info(`📁 Working Directory: ${this.options.workingDir}`);
+      this.logger.info('');
       
       this.state.startTime = Date.now();
       
@@ -129,53 +131,72 @@ class Orchestrator extends EventEmitter {
       return this.generateFinalReport();
       
     } catch (error) {
-      this.logger.error('Orchestration session failed', { error: error.message, stack: error.stack });
+      this.logger.error(`💥 Orchestration session failed: ${error.message}`);
       await this.handleFailure(error);
       throw error;
     }
   }
   
   async validateEnvironment() {
-    this.logger.info('Validating environment');
+    this.logger.info('🔧 Validating Environment');
+    this.logger.info('─────────────────────────');
     
     // Check if Claude Code is available
     try {
       const result = await this.executeCommand('claude', ['--version'], { timeout: 10000 });
-      this.logger.info('Claude Code version', { version: result.stdout.trim() });
+      this.logger.info(`✅ Claude Code: ${result.stdout.trim()}`);
     } catch (error) {
-      throw new Error('Claude Code CLI not found. Please install claude-code first.');
+      throw new Error('❌ Claude Code CLI not found. Please install claude-code first.');
     }
     
     // Validate configuration
+    this.logger.info('🔍 Validating configuration...');
     const validation = await this.validator.validateAll();
     if (!validation.valid) {
-      throw new Error(`Configuration validation failed: ${validation.errors.map(e => e.message).join(', ')}`);
+      throw new Error(`❌ Configuration validation failed: ${validation.errors.map(e => e.message).join(', ')}`);
     }
+    this.logger.info('✅ Configuration is valid');
     
     // Check available disk space
-    const stats = await fs.stat(this.options.workingDir);
     const freeSpace = await this.getAvailableDiskSpace();
+    const freeSpaceGB = Math.round(freeSpace / 1000000000);
     if (freeSpace < 1000000000) { // Less than 1GB
-      this.logger.warn('Low disk space detected', { freeSpaceGB: Math.round(freeSpace / 1000000000) });
+      this.logger.warn(`⚠️  Low disk space: ${freeSpaceGB}GB available`);
+    } else {
+      this.logger.info(`💾 Disk space: ${freeSpaceGB}GB available`);
     }
     
     // Initialize git if needed
     await this.gitManager.ensureRepository();
     
-    this.logger.info('Environment validation completed');
+    this.logger.info('✅ Environment validation completed');
+    this.logger.info('');
   }
   
   async loadTasks() {
-    this.logger.info('Loading tasks');
+    this.logger.info('📋 Loading Tasks');
+    this.logger.info('─────────────────');
     
     const tasks = await this.taskManager.loadTasks();
     const orderedTasks = await this.taskManager.resolveDependencies(tasks);
     
-    this.logger.info('Tasks loaded and ordered', {
-      totalTasks: orderedTasks.length,
-      estimatedDuration: orderedTasks.reduce((sum, task) => sum + (task.estimated_duration || 0), 0)
-    });
+    const totalTasks = orderedTasks.length;
+    const estimatedDuration = orderedTasks.reduce((sum, task) => sum + (task.estimated_duration || 0), 0);
     
+    this.logger.info(`✅ Loaded ${totalTasks} tasks`);
+    this.logger.info(`⏱️  Estimated duration: ${Math.round(estimatedDuration)} minutes`);
+    
+    // Show task overview
+    if (orderedTasks.length > 0) {
+      this.logger.info('📝 Task Overview:');
+      orderedTasks.forEach((task, index) => {
+        const priority = task.priority || 'medium';
+        const priorityIcon = priority === 'high' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
+        this.logger.info(`   ${index + 1}. ${priorityIcon} ${task.title} (${task.estimated_duration || 60}min)`);
+      });
+    }
+    
+    this.logger.info('');
     return orderedTasks;
   }
   
@@ -187,17 +208,31 @@ class Orchestrator extends EventEmitter {
       totalTasks: tasks.length
     };
     
-    for (const task of tasks) {
+    this.logger.info('🎯 Executing Tasks');
+    this.logger.info('═══════════════════');
+    
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
+      const taskNum = i + 1;
+      const totalTasks = tasks.length;
+      
       try {
         // Check time remaining
         const elapsed = (Date.now() - this.state.startTime) / 1000;
         if (elapsed >= this.options.maxDuration) {
-          this.logger.warn('Maximum session duration reached', { elapsed, maxDuration: this.options.maxDuration });
+          this.logger.warn(`⏰ Maximum session duration reached (${Math.round(elapsed)}s)`);
           break;
         }
         
         this.state.currentTask = task;
-        this.logger.info('Starting task', { taskId: task.id, title: task.title });
+        
+        // Task header
+        this.logger.info('');
+        this.logger.info(`📋 Task ${taskNum}/${totalTasks}: ${task.title}`);
+        this.logger.info('─'.repeat(50));
+        this.logger.info(`🔧 Type: ${task.type}`);
+        this.logger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
+        this.logger.info(`🆔 ID: ${task.id}`);
         
         // Create task branch
         const branchName = await this.gitManager.createTaskBranch(task);
@@ -221,7 +256,7 @@ class Orchestrator extends EventEmitter {
             });
             
             results.completed++;
-            this.logger.info('Task completed successfully', { taskId: task.id });
+            this.logger.info(`🎉 Task ${taskNum}/${totalTasks} completed successfully!`);
           } else {
             throw new Error(`Task validation failed: ${validation.errors.join(', ')}`);
           }
@@ -230,7 +265,7 @@ class Orchestrator extends EventEmitter {
         }
         
       } catch (error) {
-        this.logger.error('Task failed', { taskId: task.id, error: error.message });
+        this.logger.error(`❌ Task ${taskNum}/${totalTasks} failed: ${error.message}`);
         
         this.state.failedTasks.push({
           task,
@@ -245,6 +280,7 @@ class Orchestrator extends EventEmitter {
         
         // Continue with next task unless critical failure
         if (this.isCriticalFailure(error)) {
+          this.logger.error('💥 Critical failure detected, stopping execution');
           break;
         }
       }
@@ -262,15 +298,12 @@ class Orchestrator extends EventEmitter {
     const timeoutMs = (task.estimated_duration || 60) * 60 * 1000; // Convert minutes to milliseconds
     const prompt = await this.generateTaskPrompt(task);
     
-    this.logger.info('Executing task with Claude Code', {
-      taskId: task.id,
-      timeoutMs,
-      promptLength: prompt.length
-    });
+    const timeoutMinutes = Math.round(timeoutMs / 60000);
+    this.logger.info(`🤖 Executing task with Claude Code (timeout: ${timeoutMinutes}min)`);
     
     try {
       if (this.options.dryRun) {
-        this.logger.info('Dry run mode - skipping actual execution');
+        this.logger.info('🔄 Dry run mode - skipping actual execution');
         return {
           success: true,
           output: 'Dry run - task not actually executed',
@@ -280,6 +313,7 @@ class Orchestrator extends EventEmitter {
       }
       
       const startTime = Date.now();
+      this.logger.info('⚡ Starting Claude Code execution...');
       
       // Execute Claude Code with the generated prompt
       const result = await this.executeClaudeCode(prompt, {
@@ -288,9 +322,15 @@ class Orchestrator extends EventEmitter {
       });
       
       const duration = Date.now() - startTime;
+      const durationSeconds = Math.round(duration / 1000);
       
       // Analyze changes made by Claude Code
       const filesChanged = await this.gitManager.getChangedFiles();
+      
+      this.logger.info(`✅ Claude Code execution completed in ${durationSeconds}s`);
+      if (filesChanged.length > 0) {
+        this.logger.info(`📝 ${filesChanged.length} files were modified`);
+      }
       
       return {
         success: true,
@@ -301,6 +341,7 @@ class Orchestrator extends EventEmitter {
       };
       
     } catch (error) {
+      this.logger.error(`💥 Claude Code execution failed: ${error.message}`);
       return {
         success: false,
         error: error.message,
@@ -473,7 +514,7 @@ Please implement this task now.`;
   }
   
   async validateTaskCompletion(task, result) {
-    this.logger.info('Validating task completion', { taskId: task.id });
+    this.logger.info('🔍 Validating task completion...');
     
     const validation = {
       passed: true,
@@ -484,6 +525,7 @@ Please implement this task now.`;
     try {
       // Run project tests if specified
       if (task.custom_validation?.script) {
+        this.logger.info('🧪 Running custom validation script...');
         const scriptResult = await this.executeCommand('node', [task.custom_validation.script], {
           timeout: task.custom_validation.timeout * 1000 || 300000
         });
@@ -491,32 +533,36 @@ Please implement this task now.`;
         if (scriptResult.code !== 0) {
           validation.passed = false;
           validation.errors.push(`Custom validation script failed: ${scriptResult.stderr}`);
+        } else {
+          this.logger.info('✅ Custom validation passed');
         }
       }
       
       // Check if files were actually modified
       if (result.filesChanged.length === 0 && task.type !== 'docs') {
         validation.warnings.push('No files were modified during task execution');
+        this.logger.warn('⚠️  No files were modified during execution');
       }
       
       // Run general project validation
+      this.logger.info('🔍 Running project validation...');
       const projectValidation = await this.validator.validateProject();
       if (!projectValidation.valid) {
         validation.passed = false;
         validation.errors.push(...projectValidation.errors.map(e => e.message));
+        this.logger.error('❌ Project validation failed');
+      } else {
+        this.logger.info('✅ Project validation passed');
       }
       
     } catch (error) {
       validation.passed = false;
       validation.errors.push(`Validation error: ${error.message}`);
+      this.logger.error(`❌ Validation error: ${error.message}`);
     }
     
-    this.logger.info('Task validation completed', {
-      taskId: task.id,
-      passed: validation.passed,
-      errors: validation.errors.length,
-      warnings: validation.warnings.length
-    });
+    const status = validation.passed ? '✅' : '❌';
+    this.logger.info(`${status} Task validation completed (${validation.errors.length} errors, ${validation.warnings.length} warnings)`);
     
     return validation;
   }
@@ -659,6 +705,12 @@ Please implement this task now.`;
   
   async finalize(results) {
     this.state.endTime = Date.now();
+    const duration = this.state.endTime - this.state.startTime;
+    const durationMinutes = Math.round(duration / 60000);
+    
+    this.logger.info('');
+    this.logger.info('🏁 Finalizing Session');
+    this.logger.info('═══════════════════');
     
     // Stop monitoring
     if (this.resourceMonitoringInterval) {
@@ -674,17 +726,43 @@ Please implement this task now.`;
       this.state.claudeProcess.kill('SIGTERM');
     }
     
+    // Clean up any remaining task branches (failed tasks)
+    this.logger.info('🧹 Cleaning up remaining branches...');
+    await this.gitManager.cleanupSessionBranches();
+    
+    // Create session summary commit on main
+    if (results.completed > 0 || results.failed > 0) {
+      await this.gitManager.createSessionSummaryCommit({
+        sessionId: this.state.sessionId,
+        completedTasks: results.completed,
+        totalTasks: results.completed + results.failed,
+        duration: this.state.endTime - this.state.startTime
+      });
+    }
+    
     // Create final checkpoint
     await this.createCheckpoint();
     
     // Generate and save report
     const report = await this.reporter.generateSessionReport(this.state, results);
     
-    this.logger.info('Session finalized', {
-      duration: this.state.endTime - this.state.startTime,
-      completed: results.completed,
-      failed: results.failed
-    });
+    // Display final summary
+    this.logger.info('');
+    this.logger.info('📊 Session Summary');
+    this.logger.info('═══════════════════');
+    this.logger.info(`🆔 Session: ${this.state.sessionId}`);
+    this.logger.info(`⏱️  Duration: ${durationMinutes} minutes`);
+    this.logger.info(`✅ Completed: ${results.completed} tasks`);
+    this.logger.info(`❌ Failed: ${results.failed} tasks`);
+    this.logger.info(`📊 Success Rate: ${results.completed + results.failed > 0 ? Math.round((results.completed / (results.completed + results.failed)) * 100) : 0}%`);
+    
+    if (results.completed > 0) {
+      this.logger.info('🎉 All successful tasks have been merged to main branch!');
+    }
+    
+    this.logger.info('');
+    this.logger.info('✨ Session completed successfully!');
+    this.logger.info('');
   }
   
   async handleFailure(error) {

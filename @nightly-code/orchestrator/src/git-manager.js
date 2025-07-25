@@ -20,14 +20,14 @@ class GitManager {
   }
   
   async ensureRepository() {
-    this.options.logger.info('Ensuring git repository exists');
+    this.options.logger.info('🔍 Ensuring git repository exists...');
     
     try {
       // Check if we're in a git repository
       const isRepo = await this.git.checkIsRepo();
       
       if (!isRepo) {
-        this.options.logger.info('Initializing new git repository');
+        this.options.logger.info('🆕 Initializing new git repository...');
         await this.git.init();
         
         // Create initial commit if no commits exist
@@ -41,22 +41,19 @@ class GitManager {
       const status = await this.git.status();
       this.originalBranch = status.current;
       
-      this.options.logger.info('Git repository ready', {
-        currentBranch: this.originalBranch,
-        isRepo: true
-      });
+      this.options.logger.info(`✅ Git repository ready on branch: ${this.originalBranch}`);
       
       // Ensure we're on a clean state
       await this.ensureCleanState();
       
     } catch (error) {
-      this.options.logger.error('Failed to ensure git repository', { error: error.message });
+      this.options.logger.error('❌ Failed to ensure git repository', { error: error.message });
       throw new Error(`Git repository setup failed: ${error.message}`);
     }
   }
   
   async createInitialCommit() {
-    this.options.logger.info('Creating initial commit');
+    this.options.logger.info('📝 Creating initial commit...');
     
     // Create a minimal .gitignore if it doesn't exist
     const gitignorePath = path.join(this.options.workingDir, '.gitignore');
@@ -69,46 +66,50 @@ node_modules/
 .DS_Store
 `;
       await fs.writeFile(gitignorePath, defaultGitignore);
+      this.options.logger.info('📄 Created .gitignore file');
     }
     
     await this.git.add('.gitignore');
     await this.git.commit('Initial commit', ['--allow-empty']);
+    this.options.logger.info('✨ Initial commit created');
   }
   
   async ensureCleanState() {
     const status = await this.git.status();
     
     if (status.files.length > 0) {
-      this.options.logger.warn('Working directory has uncommitted changes', {
-        modified: status.modified.length,
-        created: status.created.length,
-        deleted: status.deleted.length,
-        staged: status.staged.length
-      });
+      const changeCount = status.modified.length + status.created.length + status.deleted.length + status.staged.length;
+      this.options.logger.warn(`⚠️  Found ${changeCount} uncommitted changes in working directory`);
       
       // Stash changes to preserve them
       await this.git.stash(['push', '-m', `Nightly Code auto-stash ${new Date().toISOString()}`]);
-      this.options.logger.info('Uncommitted changes stashed');
+      this.options.logger.info('💾 Uncommitted changes safely stashed');
+    } else {
+      this.options.logger.info('✨ Working directory is clean');
     }
   }
   
   async createTaskBranch(task) {
     const branchName = this.generateBranchName(task);
     
-    this.options.logger.info('Creating task branch', {
-      taskId: task.id,
-      branchName,
-      baseBranch: this.originalBranch
-    });
+    this.options.logger.info(`🌿 Creating task branch for: ${task.title}`);
+    this.options.logger.info(`   └─ Branch: ${branchName}`);
+    this.options.logger.info(`   └─ Base: ${this.originalBranch}`);
     
     try {
-      // Ensure we're on the original branch
+      // Ensure we're on the original branch and it's up to date
       await this.git.checkout(this.originalBranch);
       
-      // Pull latest changes if remote exists
+      // Pull latest changes if remote exists to ensure we have the most recent main
       await this.pullLatestChanges();
       
-      // Create and checkout new branch
+      // Verify we're still on main after pull (in case of conflicts)
+      const currentBranch = await this.getCurrentBranch();
+      if (currentBranch !== this.originalBranch) {
+        throw new Error(`Expected to be on ${this.originalBranch} but on ${currentBranch}`);
+      }
+      
+      // Create and checkout new branch from the updated main
       await this.git.checkoutLocalBranch(branchName);
       
       this.sessionBranches.push({
@@ -118,16 +119,12 @@ node_modules/
         baseBranch: this.originalBranch
       });
       
-      this.options.logger.info('Task branch created successfully', { branchName });
+      this.options.logger.info(`✅ Task branch created successfully from updated ${this.originalBranch}`);
       
       return branchName;
       
     } catch (error) {
-      this.options.logger.error('Failed to create task branch', {
-        taskId: task.id,
-        branchName,
-        error: error.message
-      });
+      this.options.logger.error(`❌ Failed to create task branch: ${error.message}`);
       throw new Error(`Failed to create branch for task ${task.id}: ${error.message}`);
     }
   }
@@ -148,34 +145,35 @@ node_modules/
       // Check if remote exists
       const remotes = await this.git.getRemotes(true);
       if (remotes.length === 0) {
-        this.options.logger.debug('No remote repository configured, skipping pull');
+        this.options.logger.debug('📡 No remote repository configured, skipping pull');
         return;
       }
       
+      this.options.logger.info('📥 Pulling latest changes from remote...');
       // Pull latest changes from origin
       await this.git.pull('origin', this.originalBranch);
-      this.options.logger.debug('Pulled latest changes from remote');
+      this.options.logger.info('✅ Successfully pulled latest changes');
       
     } catch (error) {
       // Don't fail if pull fails (might be offline or no remote)
-      this.options.logger.warn('Failed to pull latest changes', { error: error.message });
+      this.options.logger.warn(`⚠️  Failed to pull latest changes: ${error.message}`);
     }
   }
   
   async commitTask(task, result) {
-    this.options.logger.info('Committing task changes', {
-      taskId: task.id,
-      filesChanged: result.filesChanged?.length || 0
-    });
+    const fileCount = result.filesChanged?.length || 0;
+    this.options.logger.info(`💾 Committing task changes (${fileCount} files modified)`);
     
     try {
       // Add all changes
+      this.options.logger.info('📝 Staging changes...');
       await this.git.add('.');
       
       // Generate commit message
       const commitMessage = this.generateCommitMessage(task, result);
       
       // Create commit
+      this.options.logger.info('✨ Creating commit...');
       await this.git.commit(commitMessage);
       
       // Push to remote if configured
@@ -188,13 +186,13 @@ node_modules/
         await this.createPullRequest(task, result);
       }
       
-      this.options.logger.info('Task committed successfully', { taskId: task.id });
+      // Merge back to main immediately after successful commit
+      await this.mergeTaskToMain(task);
+      
+      this.options.logger.info('🎉 Task completed and merged to main successfully!');
       
     } catch (error) {
-      this.options.logger.error('Failed to commit task', {
-        taskId: task.id,
-        error: error.message
-      });
+      this.options.logger.error(`❌ Failed to commit task: ${error.message}`);
       throw new Error(`Failed to commit task ${task.id}: ${error.message}`);
     }
   }
@@ -281,23 +279,18 @@ node_modules/
       // Check if remote exists
       const remotes = await this.git.getRemotes(true);
       if (remotes.length === 0) {
-        this.options.logger.debug('No remote repository configured, skipping push');
+        this.options.logger.debug('📡 No remote repository configured, skipping push');
         return;
       }
       
+      this.options.logger.info('📤 Pushing branch to remote...');
       // Push branch to remote
       await this.git.push('origin', currentBranch, ['--set-upstream']);
       
-      this.options.logger.info('Branch pushed to remote', {
-        taskId: task.id,
-        branch: currentBranch
-      });
+      this.options.logger.info(`✅ Branch ${currentBranch} pushed to remote`);
       
     } catch (error) {
-      this.options.logger.warn('Failed to push branch', {
-        taskId: task.id,
-        error: error.message
-      });
+      this.options.logger.warn(`⚠️  Failed to push branch: ${error.message}`);
       // Don't throw error, as this is not critical for local development
     }
   }
@@ -307,13 +300,15 @@ node_modules/
       // Check if GitHub CLI is available
       const hasGhCli = await this.checkGitHubCLI();
       if (!hasGhCli) {
-        this.options.logger.warn('GitHub CLI not available, skipping PR creation');
+        this.options.logger.warn('⚠️  GitHub CLI not available, skipping PR creation');
         return;
       }
       
       const currentBranch = await this.getCurrentBranch();
       const prTitle = `${this.getCommitType(task.type)}: ${task.title}`;
       const prBody = await this.generatePRBody(task, result);
+      
+      this.options.logger.info('🔄 Creating pull request...');
       
       // Create PR using GitHub CLI
       const result2 = await this.executeCommand('gh', [
@@ -326,10 +321,7 @@ node_modules/
       
       if (result2.code === 0) {
         const prUrl = result2.stdout.trim();
-        this.options.logger.info('Pull request created', {
-          taskId: task.id,
-          prUrl
-        });
+        this.options.logger.info(`✅ Pull request created: ${prUrl}`);
         
         return prUrl;
       } else {
@@ -337,11 +329,56 @@ node_modules/
       }
       
     } catch (error) {
-      this.options.logger.warn('Failed to create pull request', {
-        taskId: task.id,
-        error: error.message
-      });
+      this.options.logger.warn(`⚠️  Failed to create pull request: ${error.message}`);
       // Don't throw error, as this is not critical
+    }
+  }
+  
+  async mergeTaskToMain(task) {
+    this.options.logger.info(`🔀 Merging task to ${this.originalBranch}...`);
+    
+    try {
+      const currentBranch = await this.getCurrentBranch();
+      
+      // Switch to main branch
+      this.options.logger.info(`🌟 Switching to ${this.originalBranch} branch...`);
+      await this.git.checkout(this.originalBranch);
+      
+      // Pull latest changes to ensure main is up to date
+      await this.pullLatestChanges();
+      
+      // Merge the task branch into main
+      this.options.logger.info(`🔗 Merging ${currentBranch} into ${this.originalBranch}...`);
+      await this.git.merge([currentBranch, '--no-ff']);
+      
+      // Push updated main to remote if configured
+      if (this.options.autoPush) {
+        try {
+          const remotes = await this.git.getRemotes(true);
+          if (remotes.length > 0) {
+            this.options.logger.info(`📤 Pushing updated ${this.originalBranch} to remote...`);
+            await this.git.push('origin', this.originalBranch);
+            this.options.logger.info(`✅ Updated ${this.originalBranch} pushed to remote`);
+          }
+        } catch (pushError) {
+          this.options.logger.warn(`⚠️  Failed to push updated ${this.originalBranch}: ${pushError.message}`);
+        }
+      }
+      
+      // Clean up the task branch locally
+      this.options.logger.info(`🧹 Cleaning up task branch: ${currentBranch}`);
+      await this.git.deleteLocalBranch(currentBranch);
+      
+      // Remove from session branches tracking
+      this.sessionBranches = this.sessionBranches.filter(
+        branch => branch.branchName !== currentBranch
+      );
+      
+      this.options.logger.info(`✨ Task successfully merged and branch cleaned up`);
+      
+    } catch (error) {
+      this.options.logger.error(`❌ Failed to merge task to main: ${error.message}`);
+      throw new Error(`Failed to merge task ${task.id} to main: ${error.message}`);
     }
   }
   
@@ -402,33 +439,38 @@ node_modules/
   }
   
   async revertTaskChanges(task) {
-    this.options.logger.info('Reverting task changes', { taskId: task.id });
+    this.options.logger.info(`🔄 Reverting task changes for: ${task.title}`);
     
     try {
       // Get current branch
       const currentBranch = await this.getCurrentBranch();
       
-      // Switch back to original branch
+      // Ensure we're on the main branch and it's up to date
+      this.options.logger.info(`🌟 Switching back to ${this.originalBranch}...`);
       await this.git.checkout(this.originalBranch);
+      await this.pullLatestChanges();
       
-      // Delete the task branch
-      await this.git.deleteLocalBranch(currentBranch, true);
+      // Delete the task branch if it exists
+      try {
+        const branches = await this.git.branchLocal();
+        if (branches.all.includes(currentBranch) && currentBranch !== this.originalBranch) {
+          this.options.logger.info(`🗑️  Deleting failed task branch: ${currentBranch}`);
+          await this.git.deleteLocalBranch(currentBranch, true);
+          this.options.logger.info('✅ Task branch deleted successfully');
+        }
+      } catch (branchError) {
+        this.options.logger.warn(`⚠️  Failed to delete task branch: ${branchError.message}`);
+      }
       
       // Remove from session branches
       this.sessionBranches = this.sessionBranches.filter(
         branch => branch.taskId !== task.id
       );
       
-      this.options.logger.info('Task changes reverted successfully', {
-        taskId: task.id,
-        deletedBranch: currentBranch
-      });
+      this.options.logger.info(`✨ Task changes reverted, back on ${this.originalBranch}`);
       
     } catch (error) {
-      this.options.logger.error('Failed to revert task changes', {
-        taskId: task.id,
-        error: error.message
-      });
+      this.options.logger.error(`❌ Failed to revert task changes: ${error.message}`);
       // Don't throw error, as we want to continue with other tasks
     }
   }
@@ -490,11 +532,12 @@ node_modules/
   }
   
   async createSessionSummaryCommit(sessionResults) {
-    this.options.logger.info('Creating session summary commit');
+    this.options.logger.info('📊 Creating session summary commit...');
     
     try {
-      // Switch back to original branch
+      // Ensure we're on the main branch and it's up to date
       await this.git.checkout(this.originalBranch);
+      await this.pullLatestChanges();
       
       // Create session summary file
       const summaryPath = path.join(this.options.workingDir, '.nightly-code', 'session-summaries');
@@ -503,37 +546,56 @@ node_modules/
       const summaryFile = path.join(summaryPath, `${sessionResults.sessionId}.json`);
       await fs.writeJson(summaryFile, sessionResults, { spaces: 2 });
       
+      this.options.logger.info('📝 Adding session summary to commit...');
       // Add and commit summary
       await this.git.add(summaryFile);
       
       const commitMessage = `📊 Nightly Code Session Summary
-      
+
 Session: ${sessionResults.sessionId}
 Completed: ${sessionResults.completedTasks}/${sessionResults.totalTasks} tasks
 Duration: ${Math.round(sessionResults.duration / 60000)} minutes
-Branches: ${this.sessionBranches.length}
+All successful tasks merged to main
 
 🤖 Generated with Nightly Code Orchestrator`;
       
       await this.git.commit(commitMessage);
       
-      this.options.logger.info('Session summary committed');
+      // Push the summary commit if configured
+      if (this.options.autoPush) {
+        try {
+          const remotes = await this.git.getRemotes(true);
+          if (remotes.length > 0) {
+            this.options.logger.info('📤 Pushing session summary to remote...');
+            await this.git.push('origin', this.originalBranch);
+            this.options.logger.info('✅ Session summary pushed to remote');
+          }
+        } catch (pushError) {
+          this.options.logger.warn(`⚠️  Failed to push session summary: ${pushError.message}`);
+        }
+      }
+      
+      this.options.logger.info('✅ Session summary committed to main');
       
     } catch (error) {
-      this.options.logger.warn('Failed to create session summary commit', {
-        error: error.message
-      });
+      this.options.logger.warn(`⚠️  Failed to create session summary commit: ${error.message}`);
     }
   }
   
   async cleanupSessionBranches(keepSuccessful = true) {
-    this.options.logger.info('Cleaning up session branches', {
-      totalBranches: this.sessionBranches.length,
-      keepSuccessful
-    });
+    const branchCount = this.sessionBranches.length;
+    
+    if (branchCount === 0) {
+      this.options.logger.info('🧹 No remaining branches to clean up');
+      return;
+    }
+    
+    this.options.logger.info(`🧹 Cleaning up ${branchCount} remaining session branches...`);
     
     let cleaned = 0;
     
+    // Since successful branches are automatically merged and cleaned up,
+    // this method now primarily handles cleanup of failed task branches
     for (const branchInfo of this.sessionBranches) {
       try {
         // Switch to original branch first
@@ -545,22 +607,20 @@ Branches: ${this.sessionBranches.length}
           continue;
         }
         
-        // Delete unsuccessful branches or all if requested
-        if (!keepSuccessful) {
-          await this.git.deleteLocalBranch(branchInfo.branchName, true);
-          cleaned++;
-          this.options.logger.debug('Deleted branch', { branch: branchInfo.branchName });
-        }
+        // Delete remaining branches (typically failed tasks)
+        this.options.logger.info(`🗑️  Deleting branch: ${branchInfo.branchName}`);
+        await this.git.deleteLocalBranch(branchInfo.branchName, true);
+        cleaned++;
         
       } catch (error) {
-        this.options.logger.warn('Failed to cleanup branch', {
-          branch: branchInfo.branchName,
-          error: error.message
-        });
+        this.options.logger.warn(`⚠️  Failed to cleanup branch ${branchInfo.branchName}: ${error.message}`);
       }
     }
     
-    this.options.logger.info('Branch cleanup completed', { cleaned });
+    // Clear the session branches list
+    this.sessionBranches = [];
+    
+    this.options.logger.info(`✅ Branch cleanup completed (${cleaned} branches removed)`);
   }
   
   async executeCommand(command, args = [], options = {}) {
