@@ -1815,7 +1815,7 @@ class Orchestrator extends EventEmitter {
   
 <span class="fstat-no" title="function not covered" >  as</span>ync executeClaudeCode(prompt, options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
 <span class="cstat-no" title="statement not covered" >    return new Promise(<span class="fstat-no" title="function not covered" >(r</span>esolve, reject) =&gt; {</span>
-      const args = <span class="cstat-no" title="statement not covered" >['--non-interactive'];</span>
+      const args = <span class="cstat-no" title="statement not covered" >['--dangerously-skip-permissions'];</span>
       
       const child = <span class="cstat-no" title="statement not covered" >spawn('claude-code', args, {</span>
         cwd: options.workingDir || this.options.workingDir,

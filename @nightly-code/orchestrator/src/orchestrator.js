@@ -312,7 +312,7 @@ class Orchestrator extends EventEmitter {
   
   async executeClaudeCode(prompt, options = {}) {
     return new Promise((resolve, reject) => {
-      const args = ['--non-interactive'];
+      const args = ['--dangerously-skip-permissions'];
       
       const child = spawn('claude', args, {
         cwd: options.workingDir || this.options.workingDir,
