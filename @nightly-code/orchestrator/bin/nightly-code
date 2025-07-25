@@ -1,0 +1,297 @@
+#!/usr/bin/env node
+
+const { program } = require('commander');
+const chalk = require('chalk');
+const path = require('path');
+const fs = require('fs-extra');
+
+const { Orchestrator } = require('../src/orchestrator');
+const { GitManager } = require('../src/git-manager');
+const { Reporter } = require('../src/reporter');
+const { Validator } = require('../src/validator');
+const packageJson = require('../package.json');
+
+program
+  .name('nightly-code')
+  .description('Automated 8-hour coding sessions using Claude Code')
+  .version(packageJson.version);
+
+program
+  .command('init')
+  .description('Initialize configuration in current repository')
+  .option('-f, --force', 'Overwrite existing configuration')
+  .option('-t, --template <type>', 'Use predefined template (node, python, go)', 'node')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue('🚀 Initializing Nightly Code configuration...'));
+      
+      const configPath = path.join(process.cwd(), 'nightly-code.yaml');
+      const tasksPath = path.join(process.cwd(), 'nightly-tasks.yaml');
+      
+      if (!options.force && (await fs.pathExists(configPath) || await fs.pathExists(tasksPath))) {
+        console.error(chalk.red('Configuration already exists. Use --force to overwrite.'));
+        process.exit(1);
+      }
+      
+      // Copy templates based on project type
+      const templateDir = path.join(__dirname, '..', 'templates');
+      await fs.copy(path.join(templateDir, 'session-config.yaml'), configPath);
+      await fs.copy(path.join(templateDir, 'task-template.yaml'), tasksPath);
+      
+      console.log(chalk.green('✅ Configuration initialized successfully!'));
+      console.log(chalk.yellow(`📝 Edit ${configPath} and ${tasksPath} to customize your setup`));
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Initialization failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('schedule')
+  .description('Set up automated scheduling (cron/Task Scheduler)')
+  .option('-c, --cron <expression>', 'Cron expression for scheduling', '0 22 * * *')
+  .option('-t, --timezone <tz>', 'Timezone for scheduling', 'UTC')
+  .option('--dry-run', 'Show what would be scheduled without creating it')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue('⏰ Setting up automated scheduling...'));
+      
+      const setupScript = require('../scripts/setup-cron');
+      await setupScript.configure({
+        cron: options.cron,
+        timezone: options.timezone,
+        dryRun: options.dryRun
+      });
+      
+      if (!options.dryRun) {
+        console.log(chalk.green('✅ Scheduling configured successfully!'));
+        console.log(chalk.yellow(`Next run: ${options.cron} (${options.timezone})`));
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Scheduling setup failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('run')
+  .description('Execute a single coding session manually')
+  .option('-c, --config <path>', 'Path to configuration file', 'nightly-code.yaml')
+  .option('-t, --tasks <path>', 'Path to tasks file', 'nightly-tasks.yaml')
+  .option('--max-duration <minutes>', 'Maximum session duration in minutes', '480')
+  .option('--dry-run', 'Validate configuration without executing')
+  .option('--resume <checkpoint>', 'Resume from checkpoint')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue('🎯 Starting coding session...'));
+      
+      const orchestrator = new Orchestrator({
+        configPath: options.config,
+        tasksPath: options.tasks,
+        maxDuration: parseInt(options.maxDuration) * 60, // Convert to seconds
+        dryRun: options.dryRun,
+        resumeCheckpoint: options.resume
+      });
+      
+      const result = await orchestrator.run();
+      
+      if (result.success) {
+        console.log(chalk.green('✅ Session completed successfully!'));
+        console.log(chalk.blue(`📊 Completed ${result.completedTasks}/${result.totalTasks} tasks`));
+        console.log(chalk.blue(`⏱️  Duration: ${Math.round(result.duration / 60)} minutes`));
+      } else {
+        console.log(chalk.yellow('⚠️  Session completed with issues'));
+        console.log(chalk.red(`❌ Errors: ${result.errors.length}`));
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Session failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('status')
+  .description('Check last session results')
+  .option('-v, --verbose', 'Show detailed status information')
+  .option('--json', 'Output in JSON format')
+  .action(async (options) => {
+    try {
+      const reporter = new Reporter();
+      const status = await reporter.getLastSessionStatus();
+      
+      if (options.json) {
+        console.log(JSON.stringify(status, null, 2));
+        return;
+      }
+      
+      console.log(chalk.blue('📊 Last Session Status'));
+      console.log('─'.repeat(50));
+      
+      if (!status) {
+        console.log(chalk.yellow('No previous sessions found'));
+        return;
+      }
+      
+      console.log(`Status: ${status.success ? chalk.green('✅ Success') : chalk.red('❌ Failed')}`);
+      console.log(`Date: ${chalk.cyan(new Date(status.timestamp).toLocaleString())}`);
+      console.log(`Duration: ${chalk.cyan(Math.round(status.duration / 60))} minutes`);
+      console.log(`Tasks: ${chalk.cyan(status.completedTasks)}/${chalk.cyan(status.totalTasks)} completed`);
+      
+      if (options.verbose && status.errors?.length > 0) {
+        console.log('\n' + chalk.red('Errors:'));
+        status.errors.forEach((error, i) => {
+          console.log(`  ${i + 1}. ${error}`);
+        });
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to get status:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('config')
+  .description('Manage configuration interactively')
+  .option('-l, --list', 'List current configuration')
+  .option('-e, --edit', 'Edit configuration interactively')
+  .option('-v, --validate', 'Validate current configuration')
+  .action(async (options) => {
+    try {
+      const inquirer = require('inquirer');
+      const validator = new Validator();
+      
+      if (options.list) {
+        const config = await validator.loadConfig();
+        console.log(chalk.blue('Current Configuration:'));
+        console.log('─'.repeat(50));
+        console.log(JSON.stringify(config, null, 2));
+        return;
+      }
+      
+      if (options.validate) {
+        const validation = await validator.validateAll();
+        if (validation.valid) {
+          console.log(chalk.green('✅ Configuration is valid'));
+        } else {
+          console.log(chalk.red('❌ Configuration has errors:'));
+          validation.errors.forEach(error => console.log(`  - ${error}`));
+          process.exit(1);
+        }
+        return;
+      }
+      
+      if (options.edit) {
+        console.log(chalk.blue('🔧 Interactive Configuration Editor'));
+        // Interactive configuration editing would go here
+        console.log(chalk.yellow('Interactive editing not yet implemented'));
+        return;
+      }
+      
+      // Default action - show help
+      program.commands.find(cmd => cmd.name() === 'config').help();
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Configuration management failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('validate')
+  .description('Validate current configuration')
+  .option('-c, --config <path>', 'Path to configuration file', 'nightly-code.yaml')
+  .option('-t, --tasks <path>', 'Path to tasks file', 'nightly-tasks.yaml')
+  .option('--fix', 'Attempt to fix common issues')
+  .action(async (options) => {
+    try {
+      console.log(chalk.blue('🔍 Validating configuration...'));
+      
+      const validator = new Validator({
+        configPath: options.config,
+        tasksPath: options.tasks
+      });
+      
+      const result = await validator.validateAll();
+      
+      if (result.valid) {
+        console.log(chalk.green('✅ All validations passed!'));
+      } else {
+        console.log(chalk.red('❌ Validation failed:'));
+        result.errors.forEach(error => {
+          console.log(`  - ${error.message} (${error.path})`);
+        });
+        
+        if (options.fix) {
+          console.log(chalk.yellow('🔧 Attempting to fix issues...'));
+          const fixResult = await validator.attemptFix(result.errors);
+          if (fixResult.fixed > 0) {
+            console.log(chalk.green(`✅ Fixed ${fixResult.fixed} issues`));
+          }
+          if (fixResult.remaining > 0) {
+            console.log(chalk.yellow(`⚠️  ${fixResult.remaining} issues require manual intervention`));
+          }
+        }
+        
+        process.exit(result.errors.length);
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Validation failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('report')
+  .description('View session reports')
+  .argument('[date]', 'Date for report (YYYY-MM-DD)', new Date().toISOString().split('T')[0])
+  .option('-f, --format <type>', 'Output format (json, markdown, table)', 'table')
+  .option('-o, --output <file>', 'Output file path')
+  .option('--last <count>', 'Show last N sessions', '10')
+  .action(async (date, options) => {
+    try {
+      console.log(chalk.blue(`📈 Generating report for ${date}...`));
+      
+      const reporter = new Reporter();
+      const report = await reporter.generateReport({
+        date,
+        format: options.format,
+        last: parseInt(options.last)
+      });
+      
+      if (options.output) {
+        await fs.writeFile(options.output, report);
+        console.log(chalk.green(`✅ Report saved to ${options.output}`));
+      } else {
+        console.log(report);
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Report generation failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Error handling
+program.on('command:*', () => {
+  console.error(chalk.red(`Invalid command: ${program.args.join(' ')}`));
+  console.log(chalk.yellow('See --help for available commands'));
+  process.exit(1);
+});
+
+// Global error handler
+process.on('uncaughtException', (error) => {
+  console.error(chalk.red('❌ Uncaught Exception:'), error.message);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(chalk.red('❌ Unhandled Rejection at:'), promise, 'reason:', reason);
+  process.exit(1);
+});
+
+program.parse();
