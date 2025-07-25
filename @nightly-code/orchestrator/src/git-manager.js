@@ -17,6 +17,33 @@ class GitManager {
     this.git = simpleGit(this.options.workingDir);
     this.originalBranch = null;
     this.sessionBranches = [];
+    this.operationTimers = new Map();
+  }
+  
+  // Helper methods for timing git operations
+  startGitOperation(operationName) {
+    this.operationTimers.set(operationName, Date.now());
+  }
+  
+  endGitOperation(operationName) {
+    if (!this.operationTimers.has(operationName)) {
+      return '';
+    }
+    const startTime = this.operationTimers.get(operationName);
+    const duration = Date.now() - startTime;
+    this.operationTimers.delete(operationName);
+    
+    const seconds = Math.round(duration / 1000);
+    const timeStr = seconds >= 60 ? 
+      `${Math.floor(seconds / 60)}m ${seconds % 60}s` : 
+      `${seconds}s`;
+    
+    return ` \x1b[35m[${timeStr}]\x1b[0m`; // Magenta color for git operation timing
+  }
+  
+  logGitWithTiming(level, message, operationName = null) {
+    const timing = operationName ? this.endGitOperation(operationName) : '';
+    this.options.logger[level](`${message}${timing}`);
   }
   
   async ensureRepository() {
@@ -91,6 +118,7 @@ node_modules/
   
   async createTaskBranch(task) {
     const branchName = this.generateBranchName(task);
+    this.startGitOperation('create-branch');
     
     this.options.logger.info(`🌿 Creating task branch for: ${task.title}`);
     this.options.logger.info(`   └─ Branch: ${branchName}`);
@@ -119,7 +147,7 @@ node_modules/
         baseBranch: this.originalBranch
       });
       
-      this.options.logger.info(`✅ Task branch created successfully from updated ${this.originalBranch}`);
+      this.logGitWithTiming('info', `✅ Task branch created successfully from updated ${this.originalBranch}`, 'create-branch');
       
       return branchName;
       
@@ -335,6 +363,7 @@ node_modules/
   }
   
   async mergeTaskToMain(task) {
+    this.startGitOperation('merge-to-main');
     this.options.logger.info(`🔀 Merging task to ${this.originalBranch}...`);
     
     try {
@@ -374,7 +403,7 @@ node_modules/
         branch => branch.branchName !== currentBranch
       );
       
-      this.options.logger.info(`✨ Task successfully merged and branch cleaned up`);
+      this.logGitWithTiming('info', `✨ Task successfully merged and branch cleaned up`, 'merge-to-main');
       
     } catch (error) {
       this.options.logger.error(`❌ Failed to merge task to main: ${error.message}`);

@@ -46,14 +46,74 @@ class Orchestrator extends EventEmitter {
     return `session-${date}-${time}`;
   }
   
+  // Helper methods for timing operations
+  startOperation(operationName) {
+    if (!this.operationTimers) {
+      this.operationTimers = new Map();
+    }
+    this.operationTimers.set(operationName, Date.now());
+  }
+  
+  endOperation(operationName) {
+    if (!this.operationTimers || !this.operationTimers.has(operationName)) {
+      return '';
+    }
+    const startTime = this.operationTimers.get(operationName);
+    const duration = Date.now() - startTime;
+    this.operationTimers.delete(operationName);
+    
+    const seconds = Math.round(duration / 1000);
+    const timeStr = seconds >= 60 ? 
+      `${Math.floor(seconds / 60)}m ${seconds % 60}s` : 
+      `${seconds}s`;
+    
+    return ` \x1b[35m[took ${timeStr}]\x1b[0m`; // Magenta color for operation timing
+  }
+  
+  logWithTiming(level, message, operationName = null) {
+    const timing = operationName ? this.endOperation(operationName) : '';
+    this.logger[level](`${message}${timing}`);
+  }
+  
   setupLogging() {
     const logDir = path.join(this.options.workingDir, '.nightly-code', 'logs');
     fs.ensureDirSync(logDir);
     
+    // Custom timestamp format for console
+    const consoleTimestampFormat = winston.format.timestamp({
+      format: () => {
+        const now = new Date();
+        const time = now.toLocaleTimeString('en-US', { 
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        return `\x1b[90m[${time}]\x1b[0m`; // Gray color for timestamp
+      }
+    });
+    
+    // Custom format for console output
+    const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
+      // Add elapsed time since start if available
+      let elapsedInfo = '';
+      if (this.state.startTime) {
+        const elapsed = Math.round((Date.now() - this.state.startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+        elapsedInfo = ` \x1b[36m(+${timeStr})\x1b[0m`; // Cyan color for elapsed time
+      }
+      
+      return `${timestamp}${elapsedInfo} ${level}: ${message}`;
+    });
+    
     this.logger = winston.createLogger({
       level: 'info',
       format: winston.format.combine(
-        winston.format.timestamp(),
+        winston.format.timestamp({
+          format: 'YYYY-MM-DD HH:mm:ss.SSS'
+        }),
         winston.format.errors({ stack: true }),
         winston.format.json()
       ),
@@ -63,8 +123,9 @@ class Orchestrator extends EventEmitter {
         }),
         new winston.transports.Console({
           format: winston.format.combine(
-            winston.format.colorize(),
-            winston.format.simple()
+            consoleTimestampFormat,
+            winston.format.colorize({ level: true }),
+            consoleFormat
           )
         })
       ]
@@ -138,6 +199,7 @@ class Orchestrator extends EventEmitter {
   }
   
   async validateEnvironment() {
+    this.startOperation('environment-validation');
     this.logger.info('🔧 Validating Environment');
     this.logger.info('─────────────────────────');
     
@@ -169,11 +231,12 @@ class Orchestrator extends EventEmitter {
     // Initialize git if needed
     await this.gitManager.ensureRepository();
     
-    this.logger.info('✅ Environment validation completed');
+    this.logWithTiming('info', '✅ Environment validation completed', 'environment-validation');
     this.logger.info('');
   }
   
   async loadTasks() {
+    this.startOperation('task-loading');
     this.logger.info('📋 Loading Tasks');
     this.logger.info('─────────────────');
     
@@ -196,6 +259,7 @@ class Orchestrator extends EventEmitter {
       });
     }
     
+    this.logWithTiming('info', '', 'task-loading'); // Just show timing without duplicate message
     this.logger.info('');
     return orderedTasks;
   }
@@ -225,6 +289,8 @@ class Orchestrator extends EventEmitter {
         }
         
         this.state.currentTask = task;
+        const taskOperationName = `task-${task.id}`;
+        this.startOperation(taskOperationName);
         
         // Task header
         this.logger.info('');
@@ -256,7 +322,7 @@ class Orchestrator extends EventEmitter {
             });
             
             results.completed++;
-            this.logger.info(`🎉 Task ${taskNum}/${totalTasks} completed successfully!`);
+            this.logWithTiming('info', `🎉 Task ${taskNum}/${totalTasks} completed successfully!`, taskOperationName);
           } else {
             throw new Error(`Task validation failed: ${validation.errors.join(', ')}`);
           }
