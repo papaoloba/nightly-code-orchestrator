@@ -466,7 +466,9 @@ class Orchestrator extends EventEmitter {
         if (code === 0) {
           resolve({ stdout, stderr, code });
         } else {
-          reject(new Error(`Claude Code exited with code ${code}: ${stderr}`));
+          // Combine stderr and stdout for better error reporting
+          const errorOutput = stderr.trim() || stdout.trim() || 'No output captured';
+          reject(new Error(`Claude Code exited with code ${code}: ${errorOutput}`));
         }
       });
       
