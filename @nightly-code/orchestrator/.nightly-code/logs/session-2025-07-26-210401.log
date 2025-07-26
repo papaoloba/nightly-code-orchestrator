@@ -1,0 +1,63 @@
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:01.205"}
+{"level":"info","message":"🚀 Starting Nightly Code Orchestration Session","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"═══════════════════════════════════════════════","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"📋 Session ID: session-2025-07-26-210401","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"📁 Working Directory: /Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"warn","message":"Could not load configuration file: YAML.parse is not a function","timestamp":"2025-07-26 23:04:01.221"}
+{"level":"info","message":"🔧 Validating Environment","timestamp":"2025-07-26 23:04:01.222"}
+{"level":"info","message":"─────────────────────────","timestamp":"2025-07-26 23:04:01.222"}
+{"level":"info","message":"✅ Claude Code: 1.0.61 (Claude Code)","timestamp":"2025-07-26 23:04:01.772"}
+{"level":"info","message":"🔍 Validating configuration...","timestamp":"2025-07-26 23:04:01.772"}
+{"level":"info","message":"Starting comprehensive validation","timestamp":"2025-07-26 23:04:01.772"}
+{"errors":0,"level":"info","message":"Validation completed","timestamp":"2025-07-26 23:04:03.177","valid":true,"warnings":1}
+{"level":"info","message":"✅ Configuration is valid","timestamp":"2025-07-26 23:04:03.177"}
+{"level":"warn","message":"⚠️  Low disk space: 0GB available","timestamp":"2025-07-26 23:04:03.180"}
+{"level":"info","message":"🔍 Ensuring git repository exists...","timestamp":"2025-07-26 23:04:03.180"}
+{"level":"info","message":"✅ Git repository ready on branch: main","timestamp":"2025-07-26 23:04:03.272"}
+{"level":"warn","message":"⚠️  Found 662 uncommitted changes in working directory","timestamp":"2025-07-26 23:04:03.335"}
+{"level":"info","message":"💾 Uncommitted changes safely stashed","timestamp":"2025-07-26 23:04:03.578"}
+{"level":"info","message":"🌿 Creating session branch for coding session","timestamp":"2025-07-26 23:04:03.579"}
+{"level":"info","message":"   └─ Branch: nightly-session-2025-07-26-210403","timestamp":"2025-07-26 23:04:03.579"}
+{"level":"info","message":"   └─ Base: main","timestamp":"2025-07-26 23:04:03.579"}
+{"level":"info","message":"📥 Pulling latest changes from remote...","timestamp":"2025-07-26 23:04:03.635"}
+{"level":"info","message":"✅ Successfully pulled latest changes","timestamp":"2025-07-26 23:04:04.071"}
+{"level":"info","message":"✅ Session branch created successfully from updated main \u001b[35m[1s]\u001b[0m","timestamp":"2025-07-26 23:04:04.162"}
+{"level":"info","message":"✅ Environment validation completed \u001b[35m[took 3s]\u001b[0m","timestamp":"2025-07-26 23:04:04.162"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:04.162"}
+{"level":"info","message":"📋 Loading Tasks","timestamp":"2025-07-26 23:04:04.163"}
+{"level":"info","message":"─────────────────","timestamp":"2025-07-26 23:04:04.163"}
+{"level":"info","message":"Loading tasks from file","tasksFilePath":"/Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/nightly-tasks.yaml","timestamp":"2025-07-26 23:04:04.163"}
+{"level":"warn","message":"Custom validation script not found: /Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/scripts/validate-auth.js","taskId":"implement-user-auth","timestamp":"2025-07-26 23:04:04.168"}
+{"level":"warn","message":"Custom validation script not found: /Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/scripts/validate-task.js","taskId":"template-task","timestamp":"2025-07-26 23:04:04.169"}
+{"enabledTasks":5,"level":"info","message":"Tasks loaded successfully","timestamp":"2025-07-26 23:04:04.169","totalTasks":5}
+{"level":"info","message":"Resolving task dependencies","timestamp":"2025-07-26 23:04:04.169","totalTasks":5}
+{"level":"info","message":"Dependencies resolved successfully","originalOrder":["implement-user-auth","fix-memory-leak","refactor-api-handlers","add-integration-tests","update-api-documentation"],"resolvedOrder":["fix-memory-leak","implement-user-auth","refactor-api-handlers","add-integration-tests","update-api-documentation"],"timestamp":"2025-07-26 23:04:04.169"}
+{"level":"info","message":"✅ Loaded 5 tasks","timestamp":"2025-07-26 23:04:04.169"}
+{"level":"info","message":"⏱️  Estimated duration: 615 minutes","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"📝 Task Overview:","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   1. 🟡 Fix Memory Leak in Data Processing (90min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   2. 🟡 Implement User Authentication System (180min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   3. 🟡 Refactor API Route Handlers for Better Maintainability (150min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   4. 🟡 Add Comprehensive Integration Tests (120min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   5. 🟡 Update API Documentation (75min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":" \u001b[35m[took 0s]\u001b[0m","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"🎯 Executing Tasks","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"═══════════════════","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"📋 Task 1/5: Fix Memory Leak in Data Processing","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"──────────────────────────────────────────────────","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"🔧 Type: bugfix","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"⏱️  Estimated: 90 minutes","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"🆔 ID: fix-memory-leak","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"📌 Using session branch for task: Fix Memory Leak in Data Processing","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"🤖 Executing task with Claude Code (timeout: 90min)","timestamp":"2025-07-26 23:04:04.182"}
+{"level":"info","message":"🔄 Dry run mode - skipping actual execution","timestamp":"2025-07-26 23:04:04.182"}
+{"level":"info","message":"🔍 Validating task completion...","timestamp":"2025-07-26 23:04:04.183"}
+{"level":"warn","message":"⚠️  No files were modified during execution","timestamp":"2025-07-26 23:04:04.183"}
+{"level":"info","message":"🔍 Running project validation...","timestamp":"2025-07-26 23:04:04.183"}
+{"level":"info","message":"✅ Project validation passed","timestamp":"2025-07-26 23:04:04.861"}
+{"level":"info","message":"✅ Task validation completed (0 errors, 1 warnings)","timestamp":"2025-07-26 23:04:04.862"}
+{"level":"info","message":"💾 Committing task changes (0 files modified)","timestamp":"2025-07-26 23:04:04.862"}
+{"level":"info","message":"📝 Staging all changes...","timestamp":"2025-07-26 23:04:04.862"}
