@@ -1,0 +1,15 @@
+{
+  "sessionId": "test-session-12345",
+  "completedTasks": 1,
+  "totalTasks": 1,
+  "duration": 10000,
+  "taskTags": [
+    {
+      "tagName": "task-task-1-test-task-one",
+      "taskId": "task-1",
+      "taskTitle": "Test Task One",
+      "createdAt": 1753548095023
+    }
+  ],
+  "sessionBranch": "nightly-session-2025-07-26-164133-test-ses"
+}
