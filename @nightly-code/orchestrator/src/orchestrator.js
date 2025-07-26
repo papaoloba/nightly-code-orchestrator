@@ -231,6 +231,9 @@ class Orchestrator extends EventEmitter {
     // Initialize git if needed
     await this.gitManager.ensureRepository();
     
+    // Create session branch for this coding session
+    await this.gitManager.createSessionBranch(this.state.sessionId);
+    
     this.logWithTiming('info', '✅ Environment validation completed', 'environment-validation');
     this.logger.info('');
   }
@@ -300,7 +303,7 @@ class Orchestrator extends EventEmitter {
         this.logger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
         this.logger.info(`🆔 ID: ${task.id}`);
         
-        // Create task branch
+        // Ensure we're on the session branch (task branch creation is now handled differently)
         const branchName = await this.gitManager.createTaskBranch(task);
         
         // Execute task with Claude Code
@@ -311,7 +314,7 @@ class Orchestrator extends EventEmitter {
           const validation = await this.validateTaskCompletion(task, taskResult);
           
           if (validation.passed) {
-            // Commit changes
+            // Commit changes to session branch
             await this.gitManager.commitTask(task, taskResult);
             
             this.state.completedTasks.push({
@@ -806,11 +809,37 @@ Please implement this task now.`;
       this.state.claudeProcess.kill('SIGTERM');
     }
     
+    // Create session pull request
+    if (results.completed > 0) {
+      this.logger.info('🔄 Creating session pull request...');
+      const sessionData = {
+        sessionId: this.state.sessionId,
+        completedTasks: results.completed,
+        totalTasks: results.completed + results.failed,
+        duration: this.state.endTime - this.state.startTime,
+        tasks: this.state.completedTasks.map(ct => ({
+          ...ct.task,
+          status: 'completed',
+          result: ct.result
+        })),
+        failedTasks: this.state.failedTasks.map(ft => ({
+          ...ft.task,
+          status: 'failed',
+          error: ft.error
+        }))
+      };
+      
+      const prUrl = await this.gitManager.createSessionPR(sessionData);
+      if (prUrl) {
+        this.logger.info(`✅ Session PR created: ${prUrl}`);
+      }
+    }
+    
     // Clean up any remaining task branches (failed tasks)
     this.logger.info('🧹 Cleaning up remaining branches...');
     await this.gitManager.cleanupSessionBranches();
     
-    // Create session summary commit on main
+    // Create session summary commit on main (for record keeping)
     if (results.completed > 0 || results.failed > 0) {
       await this.gitManager.createSessionSummaryCommit({
         sessionId: this.state.sessionId,
