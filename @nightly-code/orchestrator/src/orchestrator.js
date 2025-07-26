@@ -432,13 +432,25 @@ class Orchestrator extends EventEmitter {
       let stderr = '';
       
       child.stdout.on('data', (data) => {
-        stdout += data.toString();
-        this.logger.debug('Claude Code stdout', { data: data.toString() });
+        const output = data.toString();
+        stdout += output;
+        // Display Claude Code output in real-time
+        output.split('\n').forEach(line => {
+          if (line.trim()) {
+            this.logger.info(`🤖 Claude: ${line}`);
+          }
+        });
       });
       
       child.stderr.on('data', (data) => {
-        stderr += data.toString();
-        this.logger.debug('Claude Code stderr', { data: data.toString() });
+        const output = data.toString();
+        stderr += output;
+        // Display Claude Code errors in real-time
+        output.split('\n').forEach(line => {
+          if (line.trim()) {
+            this.logger.warn(`⚠️  Claude: ${line}`);
+          }
+        });
       });
       
       // Set timeout
