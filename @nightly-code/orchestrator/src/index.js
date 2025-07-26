@@ -16,7 +16,7 @@ module.exports = {
 // If run directly, show information about the package
 if (require.main === module) {
   const packageJson = require('../package.json');
-  
+
   console.log(`${packageJson.name} v${packageJson.version}`);
   console.log(packageJson.description);
   console.log('');

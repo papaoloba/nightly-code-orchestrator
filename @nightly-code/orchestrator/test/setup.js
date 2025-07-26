@@ -31,18 +31,18 @@ global.testUtils = {
     error: jest.fn(),
     debug: jest.fn()
   }),
-  
+
   // Create temporary directory for tests
   createTempDir: () => {
     const os = require('os');
     const path = require('path');
     const fs = require('fs-extra');
-    
-    const tempDir = path.join(os.tmpdir(), 'nightly-code-test-' + Date.now());
+
+    const tempDir = path.join(os.tmpdir(), `nightly-code-test-${Date.now()}`);
     fs.ensureDirSync(tempDir);
     return tempDir;
   },
-  
+
   // Clean up temporary directory
   cleanupTempDir: (tempDir) => {
     const fs = require('fs-extra');
@@ -50,10 +50,10 @@ global.testUtils = {
       fs.removeSync(tempDir);
     }
   },
-  
+
   // Wait for a promise to resolve
   wait: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-  
+
   // Create mock task object
   createMockTask: (overrides = {}) => ({
     id: 'test-task',
@@ -69,12 +69,12 @@ global.testUtils = {
     enabled: true,
     ...overrides
   }),
-  
+
   // Create mock session state
   createMockSessionState: (overrides = {}) => ({
     startTime: Date.now() - 3600000, // 1 hour ago
     endTime: Date.now(),
-    sessionId: 'test-session-' + Date.now(),
+    sessionId: `test-session-${Date.now()}`,
     completedTasks: [],
     failedTasks: [],
     checkpoints: [],
@@ -99,6 +99,6 @@ process.emit = function (name, data, ...args) {
   ) {
     return false;
   }
-  
+
   return originalEmit.apply(process, arguments);
 };

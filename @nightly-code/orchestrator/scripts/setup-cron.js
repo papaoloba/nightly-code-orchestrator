@@ -7,55 +7,54 @@ const { spawn } = require('cross-spawn');
 const inquirer = require('inquirer');
 
 class CronSetup {
-  constructor() {
+  constructor () {
     this.platform = os.platform();
     this.isWindows = this.platform === 'win32';
     this.isMacOS = this.platform === 'darwin';
     this.isLinux = this.platform === 'linux';
   }
-  
-  async configure(options = {}) {
+
+  async configure (options = {}) {
     console.log('🔧 Setting up automated scheduling...');
     console.log(`Platform detected: ${this.platform}`);
-    
+
     if (options.dryRun) {
       return this.performDryRun(options);
     }
-    
+
     try {
       // Validate environment
       await this.validateEnvironment();
-      
+
       // Get configuration
       const config = await this.getScheduleConfiguration(options);
-      
+
       // Set up scheduling based on platform
       if (this.isWindows) {
         await this.setupWindowsTaskScheduler(config);
       } else {
         await this.setupUnixCron(config);
       }
-      
+
       console.log('✅ Scheduling setup completed successfully!');
-      
     } catch (error) {
       console.error('❌ Scheduling setup failed:', error.message);
       throw error;
     }
   }
-  
-  async performDryRun(options) {
+
+  async performDryRun (options) {
     console.log('\n📋 Dry Run - Scheduling Configuration:');
     console.log('─'.repeat(50));
-    
+
     const config = await this.getScheduleConfiguration(options);
-    
+
     console.log(`Cron Expression: ${config.cron}`);
     console.log(`Timezone: ${config.timezone}`);
     console.log(`Command: ${config.command}`);
     console.log(`Working Directory: ${config.workingDir}`);
     console.log(`Log File: ${config.logFile}`);
-    
+
     if (this.isWindows) {
       console.log('\\nWindows Task Scheduler Command:');
       console.log(this.generateWindowsCommand(config));
@@ -63,25 +62,25 @@ class CronSetup {
       console.log('\\nCron Entry:');
       console.log(this.generateCronEntry(config));
     }
-    
+
     console.log('\\n✨ Dry run completed - no changes made');
   }
-  
-  async validateEnvironment() {
+
+  async validateEnvironment () {
     // Check if nightly-code command is available
     try {
       await this.executeCommand('nightly-code', ['--version']);
     } catch (error) {
       throw new Error('nightly-code command not found. Please ensure the package is installed globally or locally.');
     }
-    
+
     // Check if we're in a valid project directory
     const configExists = await fs.pathExists('nightly-code.yaml') || await fs.pathExists('nightly-code.json');
     if (!configExists) {
       console.warn('⚠️  No nightly-code configuration found in current directory.');
       console.warn('   Run "nightly-code init" first to create configuration files.');
     }
-    
+
     // Platform-specific validations
     if (this.isWindows) {
       await this.validateWindowsEnvironment();
@@ -89,24 +88,24 @@ class CronSetup {
       await this.validateUnixEnvironment();
     }
   }
-  
-  async validateWindowsEnvironment() {
+
+  async validateWindowsEnvironment () {
     try {
       await this.executeCommand('schtasks', ['/query', '/tn', 'NonExistentTask'], { allowNonZeroExit: true });
     } catch (error) {
       throw new Error('Windows Task Scheduler (schtasks) not available. Please ensure you have administrative privileges.');
     }
   }
-  
-  async validateUnixEnvironment() {
+
+  async validateUnixEnvironment () {
     try {
       await this.executeCommand('crontab', ['-l'], { allowNonZeroExit: true });
     } catch (error) {
       throw new Error('Crontab not available. Please ensure cron is installed on your system.');
     }
   }
-  
-  async getScheduleConfiguration(options) {
+
+  async getScheduleConfiguration (options) {
     const config = {
       cron: options.cron || '0 22 * * *', // Default: 10 PM every day
       timezone: options.timezone || 'UTC',
@@ -114,22 +113,22 @@ class CronSetup {
       command: this.generateNightlyCommand(),
       logFile: path.join(process.cwd(), '.nightly-code', 'logs', 'scheduler.log')
     };
-    
+
     // Interactive configuration if not provided
     if (!options.cron || !options.timezone) {
       const answers = await this.promptForConfiguration(config);
       Object.assign(config, answers);
     }
-    
+
     // Ensure log directory exists
     await fs.ensureDir(path.dirname(config.logFile));
-    
+
     return config;
   }
-  
-  async promptForConfiguration(defaultConfig) {
+
+  async promptForConfiguration (defaultConfig) {
     console.log('\\n🔧 Interactive Schedule Configuration');
-    
+
     const questions = [
       {
         type: 'input',
@@ -188,21 +187,21 @@ class CronSetup {
         }
       }
     ];
-    
+
     const answers = await inquirer.prompt(questions);
-    
+
     if (answers.customTimezone) {
       answers.timezone = answers.customTimezone;
       delete answers.customTimezone;
     }
-    
+
     return answers;
   }
-  
-  generateNightlyCommand() {
+
+  generateNightlyCommand () {
     const packagePath = path.resolve(__dirname, '..');
     const isGlobalInstall = packagePath.includes('node_modules');
-    
+
     if (isGlobalInstall) {
       return 'nightly-code run';
     } else {
@@ -210,38 +209,37 @@ class CronSetup {
       return `node "${path.join(packagePath, 'bin', 'nightly-code')}" run`;
     }
   }
-  
-  async setupWindowsTaskScheduler(config) {
+
+  async setupWindowsTaskScheduler (config) {
     console.log('Setting up Windows Task Scheduler...');
-    
+
     const taskName = 'NightlyCodeOrchestrator';
     const xmlConfig = this.generateWindowsTaskXml(config);
-    
+
     // Create temporary XML file
     const tempXmlFile = path.join(os.tmpdir(), 'nightly-code-task.xml');
     await fs.writeFile(tempXmlFile, xmlConfig);
-    
+
     try {
       // Delete existing task if it exists
       await this.executeCommand('schtasks', ['/delete', '/tn', taskName, '/f'], { allowNonZeroExit: true });
-      
+
       // Create new task
       await this.executeCommand('schtasks', ['/create', '/xml', tempXmlFile, '/tn', taskName]);
-      
+
       console.log(`✅ Windows Task "${taskName}" created successfully`);
       console.log(`   Next run time can be viewed with: schtasks /query /tn "${taskName}"`);
-      
     } finally {
       // Clean up temp file
       await fs.remove(tempXmlFile);
     }
   }
-  
-  generateWindowsTaskXml(config) {
+
+  generateWindowsTaskXml (config) {
     const cronParts = config.cron.split(' ');
     const minute = cronParts[0] === '*' ? '0' : cronParts[0];
     const hour = cronParts[1] === '*' ? '0' : cronParts[1];
-    
+
     return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
@@ -291,10 +289,10 @@ class CronSetup {
   </Actions>
 </Task>`;
   }
-  
-  async setupUnixCron(config) {
+
+  async setupUnixCron (config) {
     console.log('Setting up cron job...');
-    
+
     // Get existing crontab
     let existingCrontab = '';
     try {
@@ -303,70 +301,70 @@ class CronSetup {
     } catch (error) {
       // No existing crontab, which is fine
     }
-    
+
     // Generate new cron entry
     const cronEntry = this.generateCronEntry(config);
     const cronMarker = '# Nightly Code Orchestrator';
-    
+
     // Remove existing nightly-code entries
-    const lines = existingCrontab.split('\\n').filter(line => 
+    const lines = existingCrontab.split('\\n').filter(line =>
       !line.includes('nightly-code') && !line.includes(cronMarker)
     );
-    
+
     // Add new entry
     lines.push('');
     lines.push(cronMarker);
     lines.push(cronEntry);
     lines.push('');
-    
-    const newCrontab = lines.join('\\n').trim() + '\\n';
-    
+
+    const newCrontab = `${lines.join('\\n').trim()}\\n`;
+
     // Write new crontab
     const tempCronFile = path.join(os.tmpdir(), 'nightly-code-cron');
     await fs.writeFile(tempCronFile, newCrontab);
-    
+
     try {
       await this.executeCommand('crontab', [tempCronFile]);
       console.log('✅ Cron job created successfully');
-      console.log(`   View with: crontab -l`);
-      console.log(`   Edit with: crontab -e`);
+      console.log('   View with: crontab -l');
+      console.log('   Edit with: crontab -e');
     } finally {
       await fs.remove(tempCronFile);
     }
   }
-  
-  generateCronEntry(config) {
+
+  generateCronEntry (config) {
     const envVars = [
       `PATH=${process.env.PATH}`,
       `NODE_PATH=${process.env.NODE_PATH || ''}`,
       `HOME=${process.env.HOME}`
     ].filter(v => v.split('=')[1]).join(' ');
-    
+
     return `${config.cron} cd "${config.workingDir}" && ${envVars} ${config.command} >> "${config.logFile}" 2>&1`;
   }
-  
-  generateWindowsCommand(config) {
+
+  generateWindowsCommand (config) {
     return `schtasks /create /tn "NightlyCodeOrchestrator" /tr "cmd /c \\"cd /d \\"${config.workingDir}\\" && ${config.command}\\""`;
   }
-  
-  async executeCommand(command, args = [], options = {}) {
+
+  async executeCommand (command, args = [], options = {}) {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
         stdio: 'pipe',
         ...options
       });
-      
+
       let stdout = '';
       let stderr = '';
-      
+
       child.stdout.on('data', (data) => {
         stdout += data.toString();
       });
-      
+
       child.stderr.on('data', (data) => {
         stderr += data.toString();
       });
-      
+
       child.on('close', (code) => {
         if (code === 0 || options.allowNonZeroExit) {
           resolve({ stdout, stderr, code });
@@ -374,7 +372,7 @@ class CronSetup {
           reject(new Error(`Command failed with code ${code}: ${stderr || stdout}`));
         }
       });
-      
+
       child.on('error', (error) => {
         reject(error);
       });
@@ -385,13 +383,13 @@ class CronSetup {
 // CLI interface when run directly
 if (require.main === module) {
   const { program } = require('commander');
-  
+
   program
     .option('-c, --cron <expression>', 'Cron expression for scheduling', '0 22 * * *')
     .option('-t, --timezone <tz>', 'Timezone for scheduling', 'UTC')
     .option('--dry-run', 'Show what would be scheduled without creating it')
     .parse();
-  
+
   const setup = new CronSetup();
   setup.configure(program.opts())
     .then(() => process.exit(0))

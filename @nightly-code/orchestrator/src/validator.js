@@ -5,19 +5,19 @@ const Joi = require('joi');
 const { spawn } = require('cross-spawn');
 
 class Validator {
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.options = {
       configPath: options.configPath || 'nightly-code.yaml',
       tasksPath: options.tasksPath || 'nightly-tasks.yaml',
       workingDir: options.workingDir || process.cwd(),
       logger: options.logger || console
     };
-    
+
     this.configSchema = this.createConfigSchema();
     this.projectValidators = this.createProjectValidators();
   }
-  
-  createConfigSchema() {
+
+  createConfigSchema () {
     return Joi.object({
       session: Joi.object({
         max_duration: Joi.number().integer().min(300).max(28800).default(28800),
@@ -25,7 +25,7 @@ class Validator {
         max_concurrent_tasks: Joi.number().integer().min(1).max(5).default(1),
         checkpoint_interval: Joi.number().integer().min(60).max(3600).default(300)
       }).default(),
-      
+
       project: Joi.object({
         root_directory: Joi.string().default('./'),
         package_manager: Joi.string().valid('npm', 'yarn', 'pnpm', 'pip', 'cargo', 'go').default('npm'),
@@ -34,7 +34,7 @@ class Validator {
         build_command: Joi.string().allow('').default(''),
         setup_commands: Joi.array().items(Joi.string()).default([])
       }).default(),
-      
+
       git: Joi.object({
         branch_prefix: Joi.string().pattern(/^[a-zA-Z0-9-_]+$/).default('nightly-'),
         auto_push: Joi.boolean().default(true),
@@ -42,7 +42,7 @@ class Validator {
         pr_template: Joi.string().allow('').default(''),
         cleanup_branches: Joi.boolean().default(false)
       }).default(),
-      
+
       validation: Joi.object({
         skip_tests: Joi.boolean().default(false),
         skip_lint: Joi.boolean().default(false),
@@ -54,7 +54,7 @@ class Validator {
           required: Joi.boolean().default(true)
         })).default([])
       }).default(),
-      
+
       notifications: Joi.object({
         email: Joi.object({
           enabled: Joi.boolean().default(false),
@@ -66,13 +66,13 @@ class Validator {
           from: Joi.string().email().when('enabled', { is: true, then: Joi.required() }),
           to: Joi.array().items(Joi.string().email()).when('enabled', { is: true, then: Joi.required() })
         }).default(),
-        
+
         slack: Joi.object({
           enabled: Joi.boolean().default(false),
           webhook_url: Joi.string().uri().when('enabled', { is: true, then: Joi.required() }),
           channel: Joi.string().default('#general')
         }).default(),
-        
+
         webhook: Joi.object({
           enabled: Joi.boolean().default(false),
           url: Joi.string().uri().when('enabled', { is: true, then: Joi.required() }),
@@ -80,7 +80,7 @@ class Validator {
           headers: Joi.object().default({})
         }).default()
       }).default(),
-      
+
       security: Joi.object({
         allowed_commands: Joi.array().items(Joi.string()).default([]),
         blocked_patterns: Joi.array().items(Joi.string()).default([]),
@@ -89,46 +89,46 @@ class Validator {
       }).default()
     });
   }
-  
-  createProjectValidators() {
+
+  createProjectValidators () {
     return {
       nodejs: {
         detect: () => this.fileExists('package.json'),
         validate: async () => await this.validateNodejsProject()
       },
-      
+
       python: {
         detect: () => this.fileExists('requirements.txt') || this.fileExists('pyproject.toml') || this.fileExists('setup.py'),
         validate: async () => await this.validatePythonProject()
       },
-      
+
       go: {
         detect: () => this.fileExists('go.mod'),
         validate: async () => await this.validateGoProject()
       },
-      
+
       rust: {
         detect: () => this.fileExists('Cargo.toml'),
         validate: async () => await this.validateRustProject()
       },
-      
+
       generic: {
         detect: () => true,
         validate: async () => await this.validateGenericProject()
       }
     };
   }
-  
-  async validateAll() {
+
+  async validateAll () {
     this.options.logger.info('Starting comprehensive validation');
-    
+
     const results = {
       valid: true,
       errors: [],
       warnings: [],
       validations: {}
     };
-    
+
     try {
       // Validate configuration
       const configValidation = await this.validateConfiguration();
@@ -138,7 +138,7 @@ class Validator {
         results.errors.push(...configValidation.errors);
       }
       results.warnings.push(...configValidation.warnings);
-      
+
       // Validate tasks
       const tasksValidation = await this.validateTasks();
       results.validations.tasks = tasksValidation;
@@ -147,7 +147,7 @@ class Validator {
         results.errors.push(...tasksValidation.errors);
       }
       results.warnings.push(...tasksValidation.warnings);
-      
+
       // Validate project structure
       const projectValidation = await this.validateProject();
       results.validations.project = projectValidation;
@@ -156,7 +156,7 @@ class Validator {
         results.errors.push(...projectValidation.errors);
       }
       results.warnings.push(...projectValidation.warnings);
-      
+
       // Validate environment
       const envValidation = await this.validateEnvironment();
       results.validations.environment = envValidation;
@@ -165,46 +165,45 @@ class Validator {
         results.errors.push(...envValidation.errors);
       }
       results.warnings.push(...envValidation.warnings);
-      
+
       this.options.logger.info('Validation completed', {
         valid: results.valid,
         errors: results.errors.length,
         warnings: results.warnings.length
       });
-      
+
       return results;
-      
     } catch (error) {
       this.options.logger.error('Validation failed with exception', { error: error.message });
-      
+
       results.valid = false;
       results.errors.push({
         type: 'validation_exception',
         message: error.message,
         path: 'validator'
       });
-      
+
       return results;
     }
   }
-  
-  async validateConfiguration() {
+
+  async validateConfiguration () {
     this.options.logger.debug('Validating configuration');
-    
+
     const result = {
       valid: true,
       errors: [],
       warnings: []
     };
-    
+
     try {
       const config = await this.loadConfig();
-      
+
       const { error, value, warning } = this.configSchema.validate(config, {
         allowUnknown: true,
         stripUnknown: true
       });
-      
+
       if (error) {
         result.valid = false;
         result.errors.push(...error.details.map(detail => ({
@@ -213,12 +212,11 @@ class Validator {
           path: detail.path.join('.')
         })));
       }
-      
+
       // Additional configuration validations
       if (value) {
         await this.performAdditionalConfigValidations(value, result);
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -227,11 +225,11 @@ class Validator {
         path: this.options.configPath
       });
     }
-    
+
     return result;
   }
-  
-  async performAdditionalConfigValidations(config, result) {
+
+  async performAdditionalConfigValidations (config, result) {
     // Validate time zone
     try {
       Intl.DateTimeFormat(undefined, { timeZone: config.session.time_zone });
@@ -242,7 +240,7 @@ class Validator {
         path: 'session.time_zone'
       });
     }
-    
+
     // Validate package manager
     if (config.project.package_manager) {
       const hasPackageManager = await this.commandExists(config.project.package_manager);
@@ -254,14 +252,14 @@ class Validator {
         });
       }
     }
-    
+
     // Validate commands
     const commands = [
       { key: 'test_command', path: 'project.test_command' },
       { key: 'lint_command', path: 'project.lint_command' },
       { key: 'build_command', path: 'project.build_command' }
     ];
-    
+
     for (const { key, path } of commands) {
       const command = config.project[key];
       if (command && command.trim()) {
@@ -275,7 +273,7 @@ class Validator {
         }
       }
     }
-    
+
     // Validate PR template path
     if (config.git.pr_template) {
       const templatePath = path.resolve(this.options.workingDir, config.git.pr_template);
@@ -287,7 +285,7 @@ class Validator {
         });
       }
     }
-    
+
     // Validate notification settings
     if (config.notifications.email.enabled) {
       // Test SMTP settings would go here
@@ -298,19 +296,19 @@ class Validator {
       });
     }
   }
-  
-  async validateTasks() {
+
+  async validateTasks () {
     this.options.logger.debug('Validating tasks');
-    
+
     const result = {
       valid: true,
       errors: [],
       warnings: []
     };
-    
+
     try {
       const tasksPath = path.resolve(this.options.workingDir, this.options.tasksPath);
-      
+
       if (!await fs.pathExists(tasksPath)) {
         result.valid = false;
         result.errors.push({
@@ -320,11 +318,11 @@ class Validator {
         });
         return result;
       }
-      
+
       // Load and parse tasks
       const fileContent = await fs.readFile(tasksPath, 'utf8');
       let tasksData;
-      
+
       try {
         if (tasksPath.endsWith('.yaml') || tasksPath.endsWith('.yml')) {
           tasksData = YAML.parse(fileContent);
@@ -340,7 +338,7 @@ class Validator {
         });
         return result;
       }
-      
+
       // Validate tasks structure
       if (!tasksData || !Array.isArray(tasksData.tasks)) {
         result.valid = false;
@@ -351,7 +349,7 @@ class Validator {
         });
         return result;
       }
-      
+
       // Validate each task
       const taskIds = new Set();
       const totalEstimatedTime = tasksData.tasks.reduce((sum, task, index) => {
@@ -375,7 +373,7 @@ class Validator {
           }
           taskIds.add(task.id);
         }
-        
+
         if (!task.title) {
           result.errors.push({
             type: 'missing_task_title',
@@ -384,7 +382,7 @@ class Validator {
           });
           result.valid = false;
         }
-        
+
         if (!task.requirements) {
           result.errors.push({
             type: 'missing_task_requirements',
@@ -393,7 +391,7 @@ class Validator {
           });
           result.valid = false;
         }
-        
+
         // Validate task type
         const validTypes = ['feature', 'bugfix', 'refactor', 'test', 'docs'];
         if (task.type && !validTypes.includes(task.type)) {
@@ -403,7 +401,7 @@ class Validator {
             path: `tasks[${index}].type`
           });
         }
-        
+
         // Validate estimated duration
         const duration = task.estimated_duration || 60;
         if (duration > 480) { // More than 8 hours
@@ -413,7 +411,7 @@ class Validator {
             path: `tasks[${index}].estimated_duration`
           });
         }
-        
+
         // Validate dependencies
         if (task.dependencies) {
           for (const depId of task.dependencies) {
@@ -426,7 +424,7 @@ class Validator {
             }
           }
         }
-        
+
         // Validate file patterns
         if (task.files_to_modify) {
           for (const pattern of task.files_to_modify) {
@@ -439,10 +437,10 @@ class Validator {
             }
           }
         }
-        
+
         return sum + duration;
       }, 0);
-      
+
       // Check total estimated time
       if (totalEstimatedTime > 480) { // More than 8 hours
         result.warnings.push({
@@ -451,7 +449,7 @@ class Validator {
           path: 'tasks'
         });
       }
-      
+
       // Validate dependency cycles (simple check)
       try {
         this.detectDependencyCycles(tasksData.tasks);
@@ -463,7 +461,6 @@ class Validator {
           path: 'tasks.dependencies'
         });
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -472,88 +469,87 @@ class Validator {
         path: this.options.tasksPath
       });
     }
-    
+
     return result;
   }
-  
-  detectDependencyCycles(tasks) {
+
+  detectDependencyCycles (tasks) {
     const graph = new Map();
-    
+
     // Build adjacency list
     for (const task of tasks) {
       graph.set(task.id, task.dependencies || []);
     }
-    
+
     // DFS to detect cycles
     const visited = new Set();
     const recursionStack = new Set();
-    
+
     const hasCycle = (nodeId, path = []) => {
       if (recursionStack.has(nodeId)) {
         const cycle = path.slice(path.indexOf(nodeId)).concat(nodeId);
         throw new Error(`Circular dependency detected: ${cycle.join(' -> ')}`);
       }
-      
+
       if (visited.has(nodeId)) {
         return false;
       }
-      
+
       visited.add(nodeId);
       recursionStack.add(nodeId);
       path.push(nodeId);
-      
+
       const dependencies = graph.get(nodeId) || [];
       for (const depId of dependencies) {
         if (graph.has(depId) && hasCycle(depId, [...path])) {
           return true;
         }
       }
-      
+
       recursionStack.delete(nodeId);
       return false;
     };
-    
+
     for (const task of tasks) {
       if (!visited.has(task.id)) {
         hasCycle(task.id);
       }
     }
   }
-  
-  async validateProject() {
+
+  async validateProject () {
     this.options.logger.debug('Validating project structure');
-    
+
     const result = {
       valid: true,
       errors: [],
       warnings: []
     };
-    
+
     try {
       // Detect project type and run appropriate validator
       let projectType = 'generic';
-      
+
       for (const [type, validator] of Object.entries(this.projectValidators)) {
         if (type === 'generic') continue;
-        
+
         if (await validator.detect()) {
           projectType = type;
           break;
         }
       }
-      
+
       this.options.logger.debug('Detected project type', { projectType });
-      
+
       const validator = this.projectValidators[projectType];
       const projectResult = await validator.validate();
-      
+
       result.valid = projectResult.valid;
       result.errors.push(...projectResult.errors);
       result.warnings.push(...projectResult.warnings);
-      
+
       // General project validations
       await this.performGeneralProjectValidations(result);
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -562,14 +558,14 @@ class Validator {
         path: 'project'
       });
     }
-    
+
     return result;
   }
-  
-  async performGeneralProjectValidations(result) {
+
+  async performGeneralProjectValidations (result) {
     // Check for common security issues
     const sensitiveFiles = ['.env', '.env.local', '.env.production', 'secrets.json', 'config/secrets.yml'];
-    
+
     for (const file of sensitiveFiles) {
       if (await this.fileExists(file)) {
         result.warnings.push({
@@ -579,7 +575,7 @@ class Validator {
         });
       }
     }
-    
+
     // Check for large files that might cause issues
     try {
       const files = await this.findLargeFiles();
@@ -593,7 +589,7 @@ class Validator {
     } catch (error) {
       this.options.logger.debug('Could not check for large files', { error: error.message });
     }
-    
+
     // Check available disk space
     try {
       const freeSpace = await this.getAvailableDiskSpace();
@@ -608,14 +604,14 @@ class Validator {
       this.options.logger.debug('Could not check disk space', { error: error.message });
     }
   }
-  
-  async validateNodejsProject() {
+
+  async validateNodejsProject () {
     const result = { valid: true, errors: [], warnings: [] };
-    
+
     try {
       // Check package.json
       const packageJson = await this.loadJsonFile('package.json');
-      
+
       if (!packageJson.name) {
         result.warnings.push({
           type: 'missing_package_name',
@@ -623,7 +619,7 @@ class Validator {
           path: 'package.json.name'
         });
       }
-      
+
       if (!packageJson.scripts) {
         result.warnings.push({
           type: 'no_npm_scripts',
@@ -631,11 +627,11 @@ class Validator {
           path: 'package.json.scripts'
         });
       }
-      
+
       // Check for lock files
       const lockFiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
       const hasLockFile = await Promise.all(lockFiles.map(f => this.fileExists(f)));
-      
+
       if (!hasLockFile.some(Boolean)) {
         result.warnings.push({
           type: 'no_lock_file',
@@ -643,16 +639,16 @@ class Validator {
           path: 'package_locks'
         });
       }
-      
+
       // Check Node.js version if .nvmrc exists
       if (await this.fileExists('.nvmrc')) {
         const nvmrc = await fs.readFile(path.join(this.options.workingDir, '.nvmrc'), 'utf8');
         const requiredVersion = nvmrc.trim();
-        
+
         try {
           const nodeVersion = await this.executeCommand('node', ['--version']);
           const currentVersion = nodeVersion.stdout.trim();
-          
+
           if (!currentVersion.includes(requiredVersion)) {
             result.warnings.push({
               type: 'node_version_mismatch',
@@ -668,7 +664,7 @@ class Validator {
           });
         }
       }
-      
+
       // Test npm install
       try {
         await this.executeCommand('npm', ['ls'], { timeout: 30000 });
@@ -679,7 +675,6 @@ class Validator {
           path: 'dependencies'
         });
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -688,13 +683,13 @@ class Validator {
         path: 'nodejs'
       });
     }
-    
+
     return result;
   }
-  
-  async validatePythonProject() {
+
+  async validatePythonProject () {
     const result = { valid: true, errors: [], warnings: [] };
-    
+
     try {
       // Check Python version
       try {
@@ -712,11 +707,11 @@ class Validator {
           });
         }
       }
-      
+
       // Check requirements files
       const reqFiles = ['requirements.txt', 'requirements-dev.txt', 'pyproject.toml', 'setup.py'];
       const hasReqFile = await Promise.all(reqFiles.map(f => this.fileExists(f)));
-      
+
       if (!hasReqFile.some(Boolean)) {
         result.warnings.push({
           type: 'no_requirements_file',
@@ -724,11 +719,11 @@ class Validator {
           path: 'requirements'
         });
       }
-      
+
       // Check virtual environment
       const venvPaths = ['venv', '.venv', 'env', '.env'];
       const hasVenv = await Promise.all(venvPaths.map(p => this.fileExists(p)));
-      
+
       if (!hasVenv.some(Boolean)) {
         result.warnings.push({
           type: 'no_virtual_environment',
@@ -736,7 +731,6 @@ class Validator {
           path: 'venv'
         });
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -745,13 +739,13 @@ class Validator {
         path: 'python'
       });
     }
-    
+
     return result;
   }
-  
-  async validateGoProject() {
+
+  async validateGoProject () {
     const result = { valid: true, errors: [], warnings: [] };
-    
+
     try {
       // Check Go version
       try {
@@ -764,10 +758,10 @@ class Validator {
           path: 'go'
         });
       }
-      
+
       // Validate go.mod
       const goMod = await fs.readFile(path.join(this.options.workingDir, 'go.mod'), 'utf8');
-      
+
       if (!goMod.includes('module ')) {
         result.errors.push({
           type: 'invalid_go_mod',
@@ -776,7 +770,7 @@ class Validator {
         });
         result.valid = false;
       }
-      
+
       // Test go mod tidy
       try {
         await this.executeCommand('go', ['mod', 'tidy'], { timeout: 30000 });
@@ -787,7 +781,6 @@ class Validator {
           path: 'go.mod'
         });
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -796,13 +789,13 @@ class Validator {
         path: 'go'
       });
     }
-    
+
     return result;
   }
-  
-  async validateRustProject() {
+
+  async validateRustProject () {
     const result = { valid: true, errors: [], warnings: [] };
-    
+
     try {
       // Check Rust version
       try {
@@ -815,10 +808,10 @@ class Validator {
           path: 'rust'
         });
       }
-      
+
       // Validate Cargo.toml
       const cargoToml = await fs.readFile(path.join(this.options.workingDir, 'Cargo.toml'), 'utf8');
-      
+
       if (!cargoToml.includes('[package]')) {
         result.errors.push({
           type: 'invalid_cargo_toml',
@@ -827,7 +820,7 @@ class Validator {
         });
         result.valid = false;
       }
-      
+
       // Test cargo check
       try {
         await this.executeCommand('cargo', ['check'], { timeout: 60000 });
@@ -838,7 +831,6 @@ class Validator {
           path: 'cargo'
         });
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -847,17 +839,17 @@ class Validator {
         path: 'rust'
       });
     }
-    
+
     return result;
   }
-  
-  async validateGenericProject() {
+
+  async validateGenericProject () {
     const result = { valid: true, errors: [], warnings: [] };
-    
+
     // Basic checks for any project
     const commonFiles = ['README.md', 'README.txt', 'LICENSE', 'LICENSE.txt'];
     const hasReadme = await Promise.all(commonFiles.map(f => this.fileExists(f)));
-    
+
     if (!hasReadme.some(Boolean)) {
       result.warnings.push({
         type: 'no_readme',
@@ -865,19 +857,19 @@ class Validator {
         path: 'readme'
       });
     }
-    
+
     return result;
   }
-  
-  async validateEnvironment() {
+
+  async validateEnvironment () {
     this.options.logger.debug('Validating environment');
-    
+
     const result = {
       valid: true,
       errors: [],
       warnings: []
     };
-    
+
     try {
       // Check Claude Code CLI
       try {
@@ -891,7 +883,7 @@ class Validator {
           path: 'claude'
         });
       }
-      
+
       // Check Git
       try {
         const gitVersion = await this.executeCommand('git', ['--version']);
@@ -904,7 +896,7 @@ class Validator {
           path: 'git'
         });
       }
-      
+
       // Check GitHub CLI (optional but recommended)
       try {
         const ghVersion = await this.executeCommand('gh', ['--version']);
@@ -916,7 +908,7 @@ class Validator {
           path: 'gh'
         });
       }
-      
+
       // Check system resources
       try {
         const memInfo = await this.getSystemMemory();
@@ -930,7 +922,7 @@ class Validator {
       } catch (error) {
         this.options.logger.debug('Could not check system memory', { error: error.message });
       }
-      
+
       // Check network connectivity
       try {
         await this.executeCommand('ping', ['-c', '1', 'github.com'], { timeout: 5000 });
@@ -941,7 +933,6 @@ class Validator {
           path: 'network'
         });
       }
-      
     } catch (error) {
       result.valid = false;
       result.errors.push({
@@ -950,19 +941,19 @@ class Validator {
         path: 'environment'
       });
     }
-    
+
     return result;
   }
-  
-  async attemptFix(errors) {
+
+  async attemptFix (errors) {
     this.options.logger.info('Attempting to fix validation errors', { errorCount: errors.length });
-    
+
     const fixResult = {
       fixed: 0,
       remaining: 0,
       details: []
     };
-    
+
     for (const error of errors) {
       try {
         const fixed = await this.fixError(error);
@@ -980,12 +971,12 @@ class Validator {
         });
       }
     }
-    
+
     this.options.logger.info('Fix attempt completed', fixResult);
     return fixResult;
   }
-  
-  async fixError(error) {
+
+  async fixError (error) {
     switch (error.type) {
       case 'no_lock_file':
         if (await this.fileExists('package.json')) {
@@ -993,7 +984,7 @@ class Validator {
           return true;
         }
         break;
-        
+
       case 'no_requirements_file':
         // Create basic requirements.txt
         await fs.writeFile(
@@ -1001,7 +992,7 @@ class Validator {
           '# Add your Python dependencies here\\n'
         );
         return true;
-        
+
       case 'no_readme':
         // Create basic README
         const projectName = path.basename(this.options.workingDir);
@@ -1018,72 +1009,72 @@ Add usage instructions here.
 `;
         await fs.writeFile(path.join(this.options.workingDir, 'README.md'), readme);
         return true;
-        
+
       default:
         return false;
     }
-    
+
     return false;
   }
-  
+
   // Utility methods
-  
-  async loadConfig() {
+
+  async loadConfig () {
     const configPath = path.resolve(this.options.workingDir, this.options.configPath);
-    
+
     if (!await fs.pathExists(configPath)) {
       throw new Error(`Configuration file not found: ${configPath}`);
     }
-    
+
     const content = await fs.readFile(configPath, 'utf8');
-    
+
     if (configPath.endsWith('.yaml') || configPath.endsWith('.yml')) {
       return YAML.parse(content);
     } else {
       return JSON.parse(content);
     }
   }
-  
-  async loadJsonFile(filename) {
+
+  async loadJsonFile (filename) {
     const filePath = path.join(this.options.workingDir, filename);
     const content = await fs.readFile(filePath, 'utf8');
     return JSON.parse(content);
   }
-  
-  async fileExists(filename) {
+
+  async fileExists (filename) {
     return await fs.pathExists(path.join(this.options.workingDir, filename));
   }
-  
-  isValidFilePattern(pattern) {
+
+  isValidFilePattern (pattern) {
     // Basic validation for file patterns
     const invalidChars = /[<>:"|?*]/;
     if (invalidChars.test(pattern)) {
       return false;
     }
-    
+
     // Check for dangerous patterns
     const dangerousPatterns = [
       /\.\.\//, // Directory traversal
       /^\//, // Absolute paths
       /~/ // Home directory
     ];
-    
+
     return !dangerousPatterns.some(p => p.test(pattern));
   }
-  
-  async validateCommand(command) {
+
+  async validateCommand (command) {
     try {
       const parts = command.split(' ');
       const cmd = parts[0];
-      
+
       // Check if command exists
       return await this.commandExists(cmd);
     } catch (error) {
       return false;
     }
   }
-  
-  async commandExists(command) {
+
+  async commandExists (command) {
     try {
       await this.executeCommand('which', [command]);
       return true;
@@ -1096,17 +1087,17 @@ Add usage instructions here.
       }
     }
   }
-  
-  async findLargeFiles(sizeThreshold = 100 * 1024 * 1024) { // 100MB default
+
+  async findLargeFiles (sizeThreshold = 100 * 1024 * 1024) { // 100MB default
     const largeFiles = [];
-    
+
     const searchDir = async (dir) => {
       try {
         const items = await fs.readdir(dir, { withFileTypes: true });
-        
+
         for (const item of items) {
           const fullPath = path.join(dir, item.name);
-          
+
           if (item.isDirectory() && !item.name.startsWith('.')) {
             await searchDir(fullPath);
           } else if (item.isFile()) {
@@ -1123,12 +1114,12 @@ Add usage instructions here.
         // Skip directories we can't read
       }
     };
-    
+
     await searchDir(this.options.workingDir);
     return largeFiles;
   }
-  
-  async getAvailableDiskSpace() {
+
+  async getAvailableDiskSpace () {
     try {
       const result = await this.executeCommand('df', ['-B1', this.options.workingDir]);
       const lines = result.stdout.trim().split('\\n');
@@ -1146,14 +1137,14 @@ Add usage instructions here.
       }
     }
   }
-  
-  async getSystemMemory() {
+
+  async getSystemMemory () {
     try {
       const result = await this.executeCommand('free', ['-b']);
       const lines = result.stdout.trim().split('\\n');
       const memLine = lines[1];
       const parts = memLine.split(/\\s+/);
-      
+
       return {
         total: parseInt(parts[1]),
         available: parseInt(parts[6] || parts[3])
@@ -1169,40 +1160,40 @@ Add usage instructions here.
       }
     }
   }
-  
-  async executeCommand(command, args = [], options = {}) {
+
+  async executeCommand (command, args = [], options = {}) {
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, {
         cwd: options.cwd || this.options.workingDir,
         stdio: 'pipe'
       });
-      
+
       let stdout = '';
       let stderr = '';
-      
+
       child.stdout.on('data', (data) => {
         stdout += data.toString();
       });
-      
+
       child.stderr.on('data', (data) => {
         stderr += data.toString();
       });
-      
+
       const timeout = setTimeout(() => {
         child.kill('SIGTERM');
         reject(new Error(`Command timed out: ${command} ${args.join(' ')}`));
       }, options.timeout || 30000);
-      
+
       child.on('close', (code) => {
         clearTimeout(timeout);
-        
+
         if (code === 0 || options.allowNonZeroExit) {
           resolve({ stdout, stderr, code });
         } else {
           reject(new Error(`Command failed with code ${code}: ${stderr || stdout}`));
         }
       });
-      
+
       child.on('error', (error) => {
         clearTimeout(timeout);
         reject(error);
