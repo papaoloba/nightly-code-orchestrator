@@ -149,8 +149,15 @@ if (Get-Command nightly-code -ErrorAction SilentlyContinue) {
     
     const existingRc = await fs.readFile(rcPath, 'utf8');
     
-    if (existingRc.includes('nightly-code completion')) {
-      return; // Already set up
+    // Check for existing completion setup more robustly
+    if (shell.name === 'bash' && existingRc.includes('complete -W "init run schedule status config validate report" nightly-code')) {
+      return; // Bash completion already set up
+    }
+    if (shell.name === 'zsh' && existingRc.includes('_nightly_code()')) {
+      return; // Zsh completion already set up
+    }
+    if (shell.name === 'fish' && existingRc.includes('complete -c nightly-code')) {
+      return; // Fish completion already set up
     }
     
     let completionScript = '';
