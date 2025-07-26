@@ -48,7 +48,7 @@ program
         // Add SuperClaude configuration section
         config.superclaude = {
           enabled: true,
-          commands_path: './superclaude/commands/sc',
+          // commands_path: './superclaude/commands/sc', // Optional: if not specified, assumes global SuperClaude commands
           planning_mode: 'intelligent',
           execution_mode: 'assisted',
           task_management: 'hierarchical',
@@ -67,6 +67,7 @@ program
         console.log(chalk.cyan('   - Intelligent task planning with slash commands'));
         console.log(chalk.cyan('   - Advanced orchestration and execution strategies'));
         console.log(chalk.cyan('   - Deep integration with nightly workflow'));
+        console.log(chalk.cyan('   - Uses global SuperClaude commands (no local commands_path required)'));
       }
     } catch (error) {
       console.error(chalk.red('❌ Initialization failed:'), error.message);

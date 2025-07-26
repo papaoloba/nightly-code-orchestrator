@@ -5,7 +5,7 @@ const YAML = require('yaml');
 class SuperClaudeIntegration {
   constructor (options = {}) {
     this.options = {
-      commandsPath: options.commandsPath || './superclaude/commands/sc',
+      commandsPath: options.commandsPath, // Can be undefined
       workingDir: options.workingDir || process.cwd(),
       logger: options.logger || console,
       enabled: options.enabled || false
@@ -13,6 +13,7 @@ class SuperClaudeIntegration {
 
     this.commands = new Map();
     this.loadedCommands = false;
+    this.useGlobalCommands = !this.options.commandsPath; // Use global commands if no path specified
   }
 
   async initialize () {
@@ -25,7 +26,8 @@ class SuperClaudeIntegration {
 
     try {
       await this.loadCommands();
-      this.options.logger.info(`✅ SuperClaude integration initialized with ${this.commands.size} commands`);
+      const commandSource = this.useGlobalCommands ? 'global commands' : `local commands from ${this.options.commandsPath}`;
+      this.options.logger.info(`✅ SuperClaude integration initialized with ${this.commands.size} ${commandSource}`);
     } catch (error) {
       this.options.logger.warn(`⚠️  SuperClaude initialization failed: ${error.message}`);
       this.options.enabled = false;
@@ -33,6 +35,14 @@ class SuperClaudeIntegration {
   }
 
   async loadCommands () {
+    if (this.useGlobalCommands) {
+      // When no commands_path is specified, assume SuperClaude slash commands are globally available
+      this.options.logger.debug('Using globally installed SuperClaude commands (no commands_path specified)');
+      this.loadGlobalCommands();
+      this.loadedCommands = true;
+      return;
+    }
+
     const commandsDir = path.resolve(this.options.workingDir, this.options.commandsPath);
 
     if (!(await fs.pathExists(commandsDir))) {
@@ -60,6 +70,84 @@ class SuperClaudeIntegration {
     }
 
     this.loadedCommands = true;
+  }
+
+  loadGlobalCommands () {
+    // Define standard SuperClaude commands when no local commands directory is provided
+    const globalCommands = [
+      {
+        name: 'analyze',
+        description: 'Multi-dimensional code and system analysis',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Bash', 'TodoWrite'],
+        metadata: { category: 'analysis', 'wave-enabled': true }
+      },
+      {
+        name: 'build',
+        description: 'Project builder with framework detection',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Bash', 'TodoWrite', 'Edit', 'MultiEdit'],
+        metadata: { category: 'development', 'wave-enabled': true }
+      },
+      {
+        name: 'implement',
+        description: 'Feature and code implementation with intelligent persona activation',
+        allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Glob', 'TodoWrite', 'Task'],
+        metadata: { category: 'development', 'wave-enabled': true }
+      },
+      {
+        name: 'improve',
+        description: 'Evidence-based code enhancement',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Edit', 'MultiEdit', 'Bash'],
+        metadata: { category: 'quality', 'wave-enabled': true }
+      },
+      {
+        name: 'design',
+        description: 'Design orchestration',
+        allowedTools: ['Read', 'Write', 'Edit', 'TodoWrite'],
+        metadata: { category: 'planning', 'wave-enabled': true }
+      },
+      {
+        name: 'test',
+        description: 'Testing workflows',
+        allowedTools: ['Read', 'Bash', 'TodoWrite'],
+        metadata: { category: 'quality' }
+      },
+      {
+        name: 'document',
+        description: 'Documentation generation',
+        allowedTools: ['Read', 'Write', 'Edit', 'Grep'],
+        metadata: { category: 'documentation' }
+      },
+      {
+        name: 'troubleshoot',
+        description: 'Problem investigation',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
+        metadata: { category: 'analysis' }
+      },
+      {
+        name: 'cleanup',
+        description: 'Project cleanup and technical debt reduction',
+        allowedTools: ['Read', 'Edit', 'MultiEdit', 'Bash'],
+        metadata: { category: 'quality' }
+      },
+      {
+        name: 'git',
+        description: 'Git workflow assistant',
+        allowedTools: ['Bash', 'Read', 'Write'],
+        metadata: { category: 'version-control' }
+      }
+    ];
+
+    for (const command of globalCommands) {
+      this.commands.set(command.name, {
+        ...command,
+        sections: {
+          description: command.description,
+          execution: 'Follow SuperClaude framework patterns with intelligent tool orchestration.',
+          quality_standards: 'Apply comprehensive quality gates and validation.'
+        }
+      });
+      this.options.logger.debug(`Loaded global SuperClaude command: ${command.name}`);
+    }
   }
 
   parseCommandFile (content, filename) {

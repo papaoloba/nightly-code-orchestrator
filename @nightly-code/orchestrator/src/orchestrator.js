@@ -183,7 +183,7 @@ class Orchestrator extends EventEmitter {
 
     this.superclaudeIntegration = new SuperClaudeIntegration({
       enabled: this.superclaudeConfig.enabled,
-      commandsPath: this.superclaudeConfig.commands_path || './superclaude/commands/sc',
+      commandsPath: this.superclaudeConfig.commands_path, // Pass undefined if not specified
       workingDir: this.options.workingDir,
       logger: this.logger,
       planningMode: this.superclaudeConfig.planning_mode || 'intelligent',
