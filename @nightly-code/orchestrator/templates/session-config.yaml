@@ -105,6 +105,32 @@ notifications:
     # headers:
     #   Authorization: "Bearer your-token"
 
+rate_limiting:
+  # Enable rate limiting and retry logic for Claude AI
+  enabled: true
+  
+  # Maximum number of retries for rate-limited requests
+  max_retries: 5
+  
+  # Base delay in milliseconds before first retry (1 minute)
+  base_delay: 60000
+  
+  # Maximum delay for usage limit retries (1 hour)
+  max_delay: 3600000
+  
+  # Use exponential backoff for retry delays
+  exponential_backoff: true
+  
+  # Add random jitter to retry delays
+  jitter: true
+  
+  # Retry when Claude AI usage limits are reached
+  # This keeps the session alive instead of aborting
+  usage_limit_retry: true
+  
+  # Retry when rate limits are reached
+  rate_limit_retry: true
+
 security:
   # Whitelist of allowed commands (empty = allow all)
   # This can help restrict what Claude Code can execute

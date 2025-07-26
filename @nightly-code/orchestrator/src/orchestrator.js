@@ -4,6 +4,7 @@ const { spawn } = require('cross-spawn');
 const { EventEmitter } = require('events');
 const winston = require('winston');
 const pidusage = require('pidusage');
+const YAML = require('js-yaml');
 
 const { TaskManager } = require('./task-manager');
 const { GitManager } = require('./git-manager');
@@ -21,7 +22,11 @@ class Orchestrator extends EventEmitter {
       checkpointInterval: options.checkpointInterval || 300, // 5 minutes
       dryRun: options.dryRun || false,
       resumeCheckpoint: options.resumeCheckpoint || null,
-      workingDir: options.workingDir || process.cwd()
+      workingDir: options.workingDir || process.cwd(),
+      // Rate limiting and retry configuration
+      rateLimitRetries: options.rateLimitRetries || 5,
+      rateLimitBaseDelay: options.rateLimitBaseDelay || 60000, // 1 minute
+      enableRetryOnLimits: options.enableRetryOnLimits !== false // Default to true
     };
     
     this.state = {
@@ -132,6 +137,40 @@ class Orchestrator extends EventEmitter {
     });
   }
   
+  async loadConfigurationFile() {
+    try {
+      const configPath = path.resolve(this.options.workingDir, this.options.configPath);
+      
+      if (await fs.pathExists(configPath)) {
+        const content = await fs.readFile(configPath, 'utf8');
+        let config;
+        
+        if (configPath.endsWith('.yaml') || configPath.endsWith('.yml')) {
+          config = YAML.parse(content);
+        } else {
+          config = JSON.parse(content);
+        }
+        
+        // Update rate limiting options from config
+        if (config.rate_limiting) {
+          this.options.rateLimitRetries = config.rate_limiting.max_retries || this.options.rateLimitRetries;
+          this.options.rateLimitBaseDelay = config.rate_limiting.base_delay || this.options.rateLimitBaseDelay;
+          this.options.enableRetryOnLimits = config.rate_limiting.enabled !== false;
+          this.options.usageLimitRetry = config.rate_limiting.usage_limit_retry !== false;
+          this.options.rateLimitRetry = config.rate_limiting.rate_limit_retry !== false;
+          this.options.maxDelay = config.rate_limiting.max_delay || 3600000;
+          this.options.exponentialBackoff = config.rate_limiting.exponential_backoff !== false;
+          this.options.jitter = config.rate_limiting.jitter !== false;
+        }
+        
+        return config;
+      }
+    } catch (error) {
+      this.logger.warn(`Could not load configuration file: ${error.message}`);
+    }
+    return null;
+  }
+
   setupComponents() {
     this.taskManager = new TaskManager({
       tasksPath: this.options.tasksPath,
@@ -165,6 +204,9 @@ class Orchestrator extends EventEmitter {
       this.logger.info('');
       
       this.state.startTime = Date.now();
+      
+      // Load configuration file
+      await this.loadConfigurationFile();
       
       // Validate configuration and environment
       await this.validateEnvironment();
@@ -421,6 +463,67 @@ class Orchestrator extends EventEmitter {
   }
   
   async executeClaudeCode(prompt, options = {}) {
+    // Check if rate limiting is enabled
+    if (!this.options.enableRetryOnLimits) {
+      return await this.executeClaudeCodeSingle(prompt, options);
+    }
+    
+    const maxRetries = options.maxRetries || this.options.rateLimitRetries || 5;
+    const baseDelay = options.baseDelay || this.options.rateLimitBaseDelay || 60000; // 1 minute default
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await this.executeClaudeCodeSingle(prompt, options);
+        return result;
+      } catch (error) {
+        const errorType = this.classifyError(error);
+        
+        if (errorType === 'RATE_LIMIT' && this.options.rateLimitRetry) {
+          if (attempt < maxRetries) {
+            const delay = this.calculateBackoffDelay(attempt, baseDelay, errorType);
+            this.logger.warn(`🔄 Rate limit encountered. Waiting ${Math.round(delay / 1000)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
+            
+            // Keep session alive during wait
+            await this.waitWithProgress(delay, errorType);
+            continue;
+          } else {
+            this.logger.error(`💥 Rate limit exceeded maximum retry attempts (${maxRetries})`);
+            throw new Error(`Rate limit exceeded after ${maxRetries} retries`);
+          }
+        } else if (errorType === 'USAGE_LIMIT' && this.options.usageLimitRetry) {
+          if (attempt < maxRetries) {
+            const delay = this.calculateBackoffDelay(attempt, baseDelay, errorType);
+            this.logger.warn(`🔄 Usage limit encountered. Waiting ${Math.round(delay / 1000)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
+            
+            // Keep session alive during wait
+            await this.waitWithProgress(delay, errorType);
+            continue;
+          } else {
+            this.logger.error(`💥 Usage limit exceeded maximum retry attempts (${maxRetries})`);
+            throw new Error(`Usage limit exceeded after ${maxRetries} retries`);
+          }
+        } else if (errorType === 'TIMEOUT') {
+          // Don't retry timeouts, they're usually task-specific
+          throw error;
+        } else if (errorType === 'FATAL') {
+          // Don't retry fatal errors
+          throw error;
+        } else {
+          // For other errors, retry with shorter delay
+          if (attempt < Math.min(maxRetries, 2)) {
+            const delay = 5000; // 5 seconds for general errors
+            this.logger.warn(`⚠️  Execution failed, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+            await this.sleep(delay);
+            continue;
+          } else {
+            throw error;
+          }
+        }
+      }
+    }
+  }
+
+  async executeClaudeCodeSingle(prompt, options = {}) {
     return new Promise((resolve, reject) => {
       const args = ['--dangerously-skip-permissions'];
       
@@ -485,6 +588,113 @@ class Orchestrator extends EventEmitter {
       child.stdin.write(prompt);
       child.stdin.end();
     });
+  }
+
+  classifyError(error) {
+    const errorMessage = error.message.toLowerCase();
+    
+    // Usage limit patterns
+    const usageLimitPatterns = [
+      /claude ai usage limit/,
+      /usage limit reached/,
+      /quota exceeded/,
+      /monthly usage limit/,
+      /daily usage limit/,
+      /account usage limit/,
+      /api usage limit/
+    ];
+    
+    // Rate limit patterns  
+    const rateLimitPatterns = [
+      /rate limit/,
+      /too many requests/,
+      /requests per/,
+      /429/,
+      /throttled/,
+      /rate exceeded/
+    ];
+    
+    // Timeout patterns
+    const timeoutPatterns = [
+      /timed out/,
+      /timeout/,
+      /ETIMEDOUT/,
+      /request timeout/
+    ];
+    
+    // Fatal error patterns
+    const fatalPatterns = [
+      /authentication failed/,
+      /invalid api key/,
+      /unauthorized/,
+      /forbidden/,
+      /account suspended/,
+      /ENOSPC/,  // No space left
+      /ENOMEM/   // Out of memory
+    ];
+    
+    if (usageLimitPatterns.some(pattern => pattern.test(errorMessage))) {
+      return 'USAGE_LIMIT';
+    } else if (rateLimitPatterns.some(pattern => pattern.test(errorMessage))) {
+      return 'RATE_LIMIT';
+    } else if (timeoutPatterns.some(pattern => pattern.test(errorMessage))) {
+      return 'TIMEOUT';
+    } else if (fatalPatterns.some(pattern => pattern.test(errorMessage))) {
+      return 'FATAL';
+    } else {
+      return 'TRANSIENT';
+    }
+  }
+
+  calculateBackoffDelay(attempt, baseDelay, errorType) {
+    let delay = baseDelay;
+    
+    if (this.options.exponentialBackoff) {
+      // Usage limits typically need longer waits
+      const multiplier = errorType === 'USAGE_LIMIT' ? 2 : 1.5;
+      delay = baseDelay * Math.pow(multiplier, attempt);
+    }
+    
+    if (this.options.jitter) {
+      const jitter = Math.random() * 0.3; // Add 0-30% jitter
+      delay = delay * (1 + jitter);
+    }
+    
+    // Cap the maximum delay
+    const maxDelay = this.options.maxDelay || (errorType === 'USAGE_LIMIT' ? 3600000 : 900000);
+    return Math.min(delay, maxDelay);
+  }
+
+  async waitWithProgress(totalDelay, errorType) {
+    const updateInterval = 30000; // Update every 30 seconds
+    const startTime = Date.now();
+    const endTime = startTime + totalDelay;
+    
+    const limitType = errorType === 'USAGE_LIMIT' ? 'usage limit' : 'rate limit';
+    this.logger.info(`⏸️  Session paused due to ${limitType}. Keeping session alive...`);
+    
+    while (Date.now() < endTime) {
+      const remaining = endTime - Date.now();
+      const remainingMinutes = Math.ceil(remaining / 60000);
+      
+      if (remaining <= updateInterval) {
+        await this.sleep(remaining);
+        break;
+      }
+      
+      this.logger.info(`⏳ Waiting for ${limitType} reset... ${remainingMinutes} minutes remaining`);
+      
+      // Keep session checkpoint updated
+      await this.createCheckpoint();
+      
+      await this.sleep(updateInterval);
+    }
+    
+    this.logger.info(`✅ ${limitType.charAt(0).toUpperCase() + limitType.slice(1)} wait completed. Resuming execution...`);
+  }
+
+  async sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
   
   async generateTaskPrompt(task) {

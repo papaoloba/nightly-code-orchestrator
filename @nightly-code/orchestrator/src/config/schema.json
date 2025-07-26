@@ -307,6 +307,60 @@
       "additionalProperties": false
     },
     
+    "rate_limiting": {
+      "type": "object",
+      "description": "Rate limiting and retry configuration for Claude AI",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable rate limiting and retry logic"
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20,
+          "default": 5,
+          "description": "Maximum number of retries for rate-limited requests"
+        },
+        "base_delay": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 300000,
+          "default": 60000,
+          "description": "Base delay in milliseconds before first retry (default: 60 seconds)"
+        },
+        "max_delay": {
+          "type": "integer",
+          "minimum": 60000,
+          "maximum": 7200000,
+          "default": 3600000,
+          "description": "Maximum delay in milliseconds for usage limit retries (default: 1 hour)"
+        },
+        "exponential_backoff": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use exponential backoff for retry delays"
+        },
+        "jitter": {
+          "type": "boolean",
+          "default": true,
+          "description": "Add random jitter to retry delays"
+        },
+        "usage_limit_retry": {
+          "type": "boolean",
+          "default": true,
+          "description": "Retry when usage limits are reached"
+        },
+        "rate_limit_retry": {
+          "type": "boolean",
+          "default": true,
+          "description": "Retry when rate limits are reached"
+        }
+      },
+      "additionalProperties": false
+    },
+    
     "security": {
       "type": "object",
       "description": "Security and safety settings",
