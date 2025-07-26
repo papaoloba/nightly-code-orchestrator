@@ -147,7 +147,7 @@ class Orchestrator extends EventEmitter {
         let config;
 
         if (configPath.endsWith('.yaml') || configPath.endsWith('.yml')) {
-          config = YAML.parse(content);
+          config = YAML.load(content);
         } else {
           config = JSON.parse(content);
         }

@@ -117,7 +117,6 @@ security:
   sandbox_mode: false
 superclaude:
   enabled: true
-  # commands_path: ./superclaude/commands/sc  # Optional: if not specified, uses global SuperClaude commands
   planning_mode: intelligent
   execution_mode: assisted
   task_management: hierarchical
