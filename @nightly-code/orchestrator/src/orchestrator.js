@@ -179,7 +179,8 @@ class Orchestrator extends EventEmitter {
     
     this.gitManager = new GitManager({
       workingDir: this.options.workingDir,
-      logger: this.logger
+      logger: this.logger,
+      dryRun: this.options.dryRun
     });
     
     this.validator = new Validator({
@@ -273,8 +274,12 @@ class Orchestrator extends EventEmitter {
     // Initialize git if needed
     await this.gitManager.ensureRepository();
     
-    // Create session branch for this coding session
-    await this.gitManager.createSessionBranch(this.state.sessionId);
+    // Create session branch for this coding session (skip in dry-run mode)
+    if (!this.options.dryRun) {
+      await this.gitManager.createSessionBranch(this.state.sessionId);
+    } else {
+      this.logger.info('🔄 Dry run mode - skipping session branch creation');
+    }
     
     this.logWithTiming('info', '✅ Environment validation completed', 'environment-validation');
     this.logger.info('');
@@ -346,7 +351,9 @@ class Orchestrator extends EventEmitter {
         this.logger.info(`🆔 ID: ${task.id}`);
         
         // Ensure we're on the session branch (task branch creation is now handled differently)
-        const branchName = await this.gitManager.createTaskBranch(task);
+        if (!this.options.dryRun) {
+          const branchName = await this.gitManager.createTaskBranch(task);
+        }
         
         // Execute task with Claude Code
         const taskResult = await this.executeTask(task);
@@ -356,8 +363,12 @@ class Orchestrator extends EventEmitter {
           const validation = await this.validateTaskCompletion(task, taskResult);
           
           if (validation.passed) {
-            // Commit changes to session branch
-            await this.gitManager.commitTask(task, taskResult);
+            // Commit changes to session branch (skip in dry-run mode)
+            if (!this.options.dryRun) {
+              await this.gitManager.commitTask(task, taskResult);
+            } else {
+              this.logger.info('🔄 Dry run mode - skipping task commit');
+            }
             
             this.state.completedTasks.push({
               task,
@@ -386,8 +397,12 @@ class Orchestrator extends EventEmitter {
         
         results.failed++;
         
-        // Revert to previous state
-        await this.gitManager.revertTaskChanges(task);
+        // Revert to previous state (skip in dry-run mode)
+        if (!this.options.dryRun) {
+          await this.gitManager.revertTaskChanges(task);
+        } else {
+          this.logger.info('🔄 Dry run mode - skipping task revert');
+        }
         
         // Continue with next task unless critical failure
         if (this.isCriticalFailure(error)) {
@@ -1019,8 +1034,8 @@ Please implement this task now.`;
       this.state.claudeProcess.kill('SIGTERM');
     }
     
-    // Create session pull request
-    if (results.completed > 0) {
+    // Create session pull request (skip in dry-run mode)
+    if (results.completed > 0 && !this.options.dryRun) {
       this.logger.info('🔄 Creating session pull request...');
       const sessionData = {
         sessionId: this.state.sessionId,
@@ -1043,20 +1058,28 @@ Please implement this task now.`;
       if (prUrl) {
         this.logger.info(`✅ Session PR created: ${prUrl}`);
       }
+    } else if (results.completed > 0 && this.options.dryRun) {
+      this.logger.info('🔄 Dry run mode - skipping session pull request creation');
     }
     
-    // Clean up any remaining task branches (failed tasks)
-    this.logger.info('🧹 Cleaning up remaining branches...');
-    await this.gitManager.cleanupSessionBranches();
+    // Clean up any remaining task branches (failed tasks) (skip in dry-run mode)
+    if (!this.options.dryRun) {
+      this.logger.info('🧹 Cleaning up remaining branches...');
+      await this.gitManager.cleanupSessionBranches();
+    } else {
+      this.logger.info('🔄 Dry run mode - skipping branch cleanup');
+    }
     
-    // Create session summary commit on main (for record keeping)
-    if (results.completed > 0 || results.failed > 0) {
+    // Create session summary commit on main (for record keeping) (skip in dry-run mode)
+    if ((results.completed > 0 || results.failed > 0) && !this.options.dryRun) {
       await this.gitManager.createSessionSummaryCommit({
         sessionId: this.state.sessionId,
         completedTasks: results.completed,
         totalTasks: results.completed + results.failed,
         duration: this.state.endTime - this.state.startTime
       });
+    } else if ((results.completed > 0 || results.failed > 0) && this.options.dryRun) {
+      this.logger.info('🔄 Dry run mode - skipping session summary commit');
     }
     
     // Create final checkpoint
@@ -1075,8 +1098,10 @@ Please implement this task now.`;
     this.logger.info(`❌ Failed: ${results.failed} tasks`);
     this.logger.info(`📊 Success Rate: ${results.completed + results.failed > 0 ? Math.round((results.completed / (results.completed + results.failed)) * 100) : 0}%`);
     
-    if (results.completed > 0) {
+    if (results.completed > 0 && !this.options.dryRun) {
       this.logger.info('🎉 All successful tasks have been merged to main branch!');
+    } else if (results.completed > 0 && this.options.dryRun) {
+      this.logger.info('🔄 Dry run mode - tasks would have been merged to main branch');
     }
     
     this.logger.info('');

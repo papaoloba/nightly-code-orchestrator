@@ -1,28 +1,7 @@
 # Development files
-.git/
-.github/
 .vscode/
 .idea/
 .nightly-code/
-
-# Test files
-test/
-coverage/
-*.test.js
-*.spec.js
-test-results/
-
-# Development dependencies
-.eslintrc.js
-jest.config.js
-.eslintignore
-.prettierrc
-.prettierignore
-
-# Documentation that's not needed in the package
-docs/
-examples/
-*.md.backup
 
 # OS generated files
 .DS_Store

@@ -11,7 +11,8 @@ class GitManager {
       autoPush: options.autoPush !== false,
       createPR: options.createPR !== false,
       prTemplate: options.prTemplate || null,
-      logger: options.logger || console
+      logger: options.logger || console,
+      dryRun: options.dryRun || false
     };
     
     this.git = simpleGit(this.options.workingDir);
@@ -55,6 +56,13 @@ class GitManager {
       const isRepo = await this.git.checkIsRepo();
       
       if (!isRepo) {
+        if (this.options.dryRun) {
+          this.options.logger.info('🔄 Dry run mode - would initialize new git repository');
+          // Set a fake original branch for dry run
+          this.originalBranch = 'main';
+          return;
+        }
+        
         this.options.logger.info('🆕 Initializing new git repository...');
         await this.git.init();
         
@@ -71,8 +79,12 @@ class GitManager {
       
       this.options.logger.info(`✅ Git repository ready on branch: ${this.originalBranch}`);
       
-      // Ensure we're on a clean state
-      await this.ensureCleanState();
+      // Ensure we're on a clean state (skip in dry-run mode)
+      if (!this.options.dryRun) {
+        await this.ensureCleanState();
+      } else {
+        this.options.logger.info('🔄 Dry run mode - skipping clean state check');
+      }
       
     } catch (error) {
       this.options.logger.error('❌ Failed to ensure git repository', { error: error.message });
@@ -81,6 +93,11 @@ class GitManager {
   }
   
   async createInitialCommit() {
+    if (this.options.dryRun) {
+      this.options.logger.info('🔄 Dry run mode - would create initial commit');
+      return;
+    }
+    
     this.options.logger.info('📝 Creating initial commit...');
     
     // Create a minimal .gitignore if it doesn't exist
@@ -118,6 +135,19 @@ node_modules/
   }
   
   async createSessionBranch(sessionId) {
+    if (this.options.dryRun) {
+      const branchName = this.generateSessionBranchName(sessionId);
+      this.options.logger.info(`🔄 Dry run mode - would create session branch: ${branchName}`);
+      this.sessionBranch = {
+        branchName,
+        sessionId,
+        createdAt: Date.now(),
+        baseBranch: this.originalBranch,
+        taskTags: []
+      };
+      return branchName;
+    }
+    
     const branchName = this.generateSessionBranchName(sessionId);
     this.startGitOperation('create-session-branch');
     
@@ -209,6 +239,12 @@ node_modules/
   }
   
   async commitTaskChanges(task, result, commitChunks = []) {
+    if (this.options.dryRun) {
+      const fileCount = result.filesChanged?.length || 0;
+      this.options.logger.info(`🔄 Dry run mode - would commit task changes (${fileCount} files modified)`);
+      return ['dry-run-commit'];
+    }
+    
     const fileCount = result.filesChanged?.length || 0;
     this.options.logger.info(`💾 Committing task changes (${fileCount} files modified)`);
     
@@ -375,6 +411,12 @@ node_modules/
   }
   
   async createSessionPR(sessionResults) {
+    if (this.options.dryRun) {
+      this.options.logger.info('🔄 Dry run mode - would create session pull request');
+      this.options.logger.info(`   └─ Title: Coding Session: ${sessionResults.completedTasks} tasks completed`);
+      return 'https://github.com/example/repo/pull/dry-run';
+    }
+    
     try {
       // Check if GitHub CLI is available
       const hasGhCli = await this.checkGitHubCLI();
@@ -424,6 +466,28 @@ node_modules/
   }
   
   async createTaskTag(task, commits = []) {
+    if (this.options.dryRun) {
+      const sanitizedTitle = task.title
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .slice(0, 30);
+      const tagName = `task-${task.id}-${sanitizedTitle}`;
+      this.options.logger.info(`🔄 Dry run mode - would create task tag: ${tagName}`);
+      
+      // Still add to session branch tracking for dry run
+      if (this.sessionBranch) {
+        this.sessionBranch.taskTags.push({
+          tagName,
+          taskId: task.id,
+          commits,
+          createdAt: Date.now()
+        });
+      }
+      
+      return tagName;
+    }
+    
     try {
       const sanitizedTitle = task.title
         .toLowerCase()
@@ -583,6 +647,11 @@ node_modules/
   }
   
   async revertTaskChanges(task) {
+    if (this.options.dryRun) {
+      this.options.logger.info(`🔄 Dry run mode - would revert task changes for: ${task.title}`);
+      return;
+    }
+    
     this.options.logger.info(`🔄 Reverting task changes for: ${task.title}`);
     
     try {
@@ -676,6 +745,13 @@ node_modules/
   }
   
   async createSessionSummaryCommit(sessionResults) {
+    if (this.options.dryRun) {
+      this.options.logger.info('🔄 Dry run mode - would create session summary commit');
+      this.options.logger.info(`   └─ Session: ${sessionResults.sessionId}`);
+      this.options.logger.info(`   └─ Completed: ${sessionResults.completedTasks}/${sessionResults.totalTasks} tasks`);
+      return;
+    }
+    
     this.options.logger.info('📊 Creating session summary commit...');
     
     try {
@@ -727,6 +803,11 @@ All successful tasks merged to main
   }
   
   async cleanupSessionBranches(keepSuccessful = true) {
+    if (this.options.dryRun) {
+      this.options.logger.info('🔄 Dry run mode - would clean up session branches');
+      return;
+    }
+    
     // In the new workflow, we only clean up the session branch after PR creation
     if (!this.sessionBranch) {
       this.options.logger.info('🧹 No session branch to clean up');
