@@ -1,0 +1,264 @@
+# Nightly Code Session Configuration
+# This file configures how automated coding sessions are executed
+
+session:
+  # Maximum duration for a single session (in seconds)
+  # Default: 28800 (8 hours)
+  max_duration: 28800
+  
+  # Timezone for scheduling and logging
+  time_zone: "UTC"
+  
+  # Maximum number of tasks to run concurrently
+  # Note: Currently only supports 1
+  max_concurrent_tasks: 1
+  
+  # Interval between automatic checkpoints (in seconds)
+  checkpoint_interval: 300
+
+project:
+  # Root directory of your project
+  root_directory: "./"
+  
+  # Package manager used by your project
+  # Options: npm, yarn, pnpm, pip, cargo, go
+  package_manager: "npm"
+  
+  # Command to run tests
+  # Leave empty to skip testing
+  test_command: "npm test"
+  
+  # Command to run linting
+  # Leave empty to skip linting
+  lint_command: "npm run lint"
+  
+  # Command to build the project
+  # Leave empty to skip building
+  build_command: "npm run build"
+  
+  # Commands to run before starting the session
+  # Useful for setup, installing dependencies, etc.
+  setup_commands:
+    - "npm install"
+
+git:
+  # Prefix for automatically created branches
+  branch_prefix: "nightly-"
+  
+  # Automatically push branches to remote repository
+  auto_push: true
+  
+  # Automatically create pull requests (requires GitHub CLI)
+  create_pr: true
+  
+  # Path to pull request template file (optional)
+  pr_template: ""
+  
+  # Clean up branches after session completion
+  cleanup_branches: false
+
+validation:
+  # Skip running tests during validation
+  skip_tests: false
+  
+  # Skip running linting during validation
+  skip_lint: false
+  
+  # Skip running build during validation
+  skip_build: false
+  
+  # Custom validation commands
+  custom_validators: []
+    # Example:
+    # - name: "Security Audit"
+    #   command: "npm audit --audit-level high"
+    #   timeout: 120
+    #   required: true
+
+notifications:
+  # Email notifications
+  email:
+    enabled: false
+    # Uncomment and configure if you want email notifications
+    # smtp_host: "smtp.gmail.com"
+    # smtp_port: 587
+    # smtp_secure: false
+    # smtp_user: "your-email@gmail.com"
+    # smtp_pass: "your-app-password"
+    # from: "nightly-code@your-domain.com"
+    # to:
+    #   - "developer@your-domain.com"
+  
+  # Slack notifications
+  slack:
+    enabled: false
+    # Uncomment and configure if you want Slack notifications
+    # webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    # channel: "#development"
+  
+  # Generic webhook notifications
+  webhook:
+    enabled: false
+    # Uncomment and configure if you want webhook notifications
+    # url: "https://your-webhook-endpoint.com/notifications"
+    # method: "POST"
+    # headers:
+    #   Authorization: "Bearer your-token"
+
+rate_limiting:
+  # Enable rate limiting and retry logic for Claude AI
+  enabled: true
+  
+  # Maximum number of retries for rate-limited requests
+  max_retries: 5
+  
+  # Base delay in milliseconds before first retry (1 minute)
+  base_delay: 60000
+  
+  # Maximum delay for usage limit retries (1 hour)
+  max_delay: 3600000
+  
+  # Use exponential backoff for retry delays
+  exponential_backoff: true
+  
+  # Add random jitter to retry delays
+  jitter: true
+  
+  # Retry when Claude AI usage limits are reached
+  # This keeps the session alive instead of aborting
+  usage_limit_retry: true
+  
+  # Retry when rate limits are reached
+  rate_limit_retry: true
+
+security:
+  # Whitelist of allowed commands (empty = allow all)
+  # This can help restrict what Claude Code can execute
+  allowed_commands: []
+  
+  # Patterns to block in generated code
+  # These patterns will prevent dangerous operations
+  blocked_patterns:
+    - "rm -rf"
+    - "sudo rm"
+    - "format c:"
+    - "del /s"
+    - "DROP TABLE"
+    - "DROP DATABASE"
+    - "TRUNCATE TABLE"
+    - "DELETE FROM"
+    - "UPDATE.*SET"
+    - "ALTER TABLE.*DROP"
+    - "shutdown"
+    - "reboot"
+    - "halt"
+    - "poweroff"
+    - "kill -9"
+    - "killall"
+    - "pkill"
+    - "mkfs"
+    - "fdisk"
+    - "dd if="
+    - "wget.*|.*sh"
+    - "curl.*|.*sh"
+    - "eval"
+    - "exec"
+    - "system("
+    - "shell_exec"
+    - "passthru"
+    - "proc_open"
+    - "__import__"
+    - "getattr"
+    - "setattr"
+    - "delattr"
+    - "globals()"
+    - "locals()"
+    - "vars()"
+    - "dir()"
+    - "open.*w"
+    - "file.*write"
+    - "os.remove"
+    - "os.unlink"
+    - "shutil.rmtree"
+    - "subprocess"
+    - "os.system"
+    - "os.popen"
+    - "fs.unlink"
+    - "fs.rmdir"
+    - "child_process"
+    - "Process.Start"
+    - "ProcessBuilder"
+    - "Runtime.getRuntime"
+    - "chmod 777"
+    - "chmod +x"
+    - "/etc/passwd"
+    - "/etc/shadow"
+    - "~/.ssh"
+    - "id_rsa"
+    - "private_key"
+    - "BEGIN PRIVATE KEY"
+    - "aws configure"
+    - "gcloud auth"
+    - "kubectl"
+    - "docker run"
+    - "docker exec"
+    - "sudo"
+    - "su -"
+    - "passwd"
+    - "useradd"
+    - "userdel"
+    - "usermod"
+    - "crontab"
+    - "at "
+    - "batch"
+
+  
+  # Maximum file size to process (in bytes)
+  # Default: 10MB
+  max_file_size: 10485760
+  
+  # Run in sandbox mode with restricted access
+  sandbox_mode: false
+# SuperClaude Framework Integration
+superclaude:
+  # Enable SuperClaude Framework for enhanced AI-driven development
+  enabled: true
+  
+  # GitHub repository URL for SuperClaude Framework
+  framework_url: "https://github.com/SuperClaude-Org/SuperClaude_Framework"
+  
+  # Local path to SuperClaude commands directory (will be auto-cloned if not present)
+  commands_path: "./superclaude/commands/sc"
+  
+  # Use SuperClaude slash commands for task planning and execution
+  use_slash_commands: true
+  
+  # SuperClaude-specific configuration
+  config:
+    # Auto-activate personas based on task context
+    auto_persona_activation: true
+    
+    # Enable MCP server integration for enhanced capabilities
+    mcp_integration: true
+    
+    # Use wave orchestration for complex multi-step tasks
+    wave_orchestration: true
+    
+    # Token efficiency mode for cost optimization
+    token_efficiency: true
+    
+    # SuperClaude command prefix for slash commands
+    command_prefix: "/sc:"
+    
+    # Available SuperClaude commands for nightly sessions
+    available_commands:
+      - "analyze"
+      - "implement"
+      - "improve"
+      - "build"
+      - "design"
+      - "troubleshoot"
+      - "cleanup"
+      - "document"
+      - "test"
+      - "git"

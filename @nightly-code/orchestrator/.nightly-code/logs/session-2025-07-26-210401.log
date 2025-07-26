@@ -1,0 +1,150 @@
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:01.205"}
+{"level":"info","message":"🚀 Starting Nightly Code Orchestration Session","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"═══════════════════════════════════════════════","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"📋 Session ID: session-2025-07-26-210401","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"📁 Working Directory: /Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:01.219"}
+{"level":"warn","message":"Could not load configuration file: YAML.parse is not a function","timestamp":"2025-07-26 23:04:01.221"}
+{"level":"info","message":"🔧 Validating Environment","timestamp":"2025-07-26 23:04:01.222"}
+{"level":"info","message":"─────────────────────────","timestamp":"2025-07-26 23:04:01.222"}
+{"level":"info","message":"✅ Claude Code: 1.0.61 (Claude Code)","timestamp":"2025-07-26 23:04:01.772"}
+{"level":"info","message":"🔍 Validating configuration...","timestamp":"2025-07-26 23:04:01.772"}
+{"level":"info","message":"Starting comprehensive validation","timestamp":"2025-07-26 23:04:01.772"}
+{"errors":0,"level":"info","message":"Validation completed","timestamp":"2025-07-26 23:04:03.177","valid":true,"warnings":1}
+{"level":"info","message":"✅ Configuration is valid","timestamp":"2025-07-26 23:04:03.177"}
+{"level":"warn","message":"⚠️  Low disk space: 0GB available","timestamp":"2025-07-26 23:04:03.180"}
+{"level":"info","message":"🔍 Ensuring git repository exists...","timestamp":"2025-07-26 23:04:03.180"}
+{"level":"info","message":"✅ Git repository ready on branch: main","timestamp":"2025-07-26 23:04:03.272"}
+{"level":"warn","message":"⚠️  Found 662 uncommitted changes in working directory","timestamp":"2025-07-26 23:04:03.335"}
+{"level":"info","message":"💾 Uncommitted changes safely stashed","timestamp":"2025-07-26 23:04:03.578"}
+{"level":"info","message":"🌿 Creating session branch for coding session","timestamp":"2025-07-26 23:04:03.579"}
+{"level":"info","message":"   └─ Branch: nightly-session-2025-07-26-210403","timestamp":"2025-07-26 23:04:03.579"}
+{"level":"info","message":"   └─ Base: main","timestamp":"2025-07-26 23:04:03.579"}
+{"level":"info","message":"📥 Pulling latest changes from remote...","timestamp":"2025-07-26 23:04:03.635"}
+{"level":"info","message":"✅ Successfully pulled latest changes","timestamp":"2025-07-26 23:04:04.071"}
+{"level":"info","message":"✅ Session branch created successfully from updated main \u001b[35m[1s]\u001b[0m","timestamp":"2025-07-26 23:04:04.162"}
+{"level":"info","message":"✅ Environment validation completed \u001b[35m[took 3s]\u001b[0m","timestamp":"2025-07-26 23:04:04.162"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:04.162"}
+{"level":"info","message":"📋 Loading Tasks","timestamp":"2025-07-26 23:04:04.163"}
+{"level":"info","message":"─────────────────","timestamp":"2025-07-26 23:04:04.163"}
+{"level":"info","message":"Loading tasks from file","tasksFilePath":"/Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/nightly-tasks.yaml","timestamp":"2025-07-26 23:04:04.163"}
+{"level":"warn","message":"Custom validation script not found: /Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/scripts/validate-auth.js","taskId":"implement-user-auth","timestamp":"2025-07-26 23:04:04.168"}
+{"level":"warn","message":"Custom validation script not found: /Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/scripts/validate-task.js","taskId":"template-task","timestamp":"2025-07-26 23:04:04.169"}
+{"enabledTasks":5,"level":"info","message":"Tasks loaded successfully","timestamp":"2025-07-26 23:04:04.169","totalTasks":5}
+{"level":"info","message":"Resolving task dependencies","timestamp":"2025-07-26 23:04:04.169","totalTasks":5}
+{"level":"info","message":"Dependencies resolved successfully","originalOrder":["implement-user-auth","fix-memory-leak","refactor-api-handlers","add-integration-tests","update-api-documentation"],"resolvedOrder":["fix-memory-leak","implement-user-auth","refactor-api-handlers","add-integration-tests","update-api-documentation"],"timestamp":"2025-07-26 23:04:04.169"}
+{"level":"info","message":"✅ Loaded 5 tasks","timestamp":"2025-07-26 23:04:04.169"}
+{"level":"info","message":"⏱️  Estimated duration: 615 minutes","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"📝 Task Overview:","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   1. 🟡 Fix Memory Leak in Data Processing (90min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   2. 🟡 Implement User Authentication System (180min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   3. 🟡 Refactor API Route Handlers for Better Maintainability (150min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   4. 🟡 Add Comprehensive Integration Tests (120min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"   5. 🟡 Update API Documentation (75min)","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":" \u001b[35m[took 0s]\u001b[0m","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"🎯 Executing Tasks","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"═══════════════════","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:04.170"}
+{"level":"info","message":"📋 Task 1/5: Fix Memory Leak in Data Processing","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"──────────────────────────────────────────────────","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"🔧 Type: bugfix","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"⏱️  Estimated: 90 minutes","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"🆔 ID: fix-memory-leak","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"📌 Using session branch for task: Fix Memory Leak in Data Processing","timestamp":"2025-07-26 23:04:04.171"}
+{"level":"info","message":"🤖 Executing task with Claude Code (timeout: 90min)","timestamp":"2025-07-26 23:04:04.182"}
+{"level":"info","message":"🔄 Dry run mode - skipping actual execution","timestamp":"2025-07-26 23:04:04.182"}
+{"level":"info","message":"🔍 Validating task completion...","timestamp":"2025-07-26 23:04:04.183"}
+{"level":"warn","message":"⚠️  No files were modified during execution","timestamp":"2025-07-26 23:04:04.183"}
+{"level":"info","message":"🔍 Running project validation...","timestamp":"2025-07-26 23:04:04.183"}
+{"level":"info","message":"✅ Project validation passed","timestamp":"2025-07-26 23:04:04.861"}
+{"level":"info","message":"✅ Task validation completed (0 errors, 1 warnings)","timestamp":"2025-07-26 23:04:04.862"}
+{"level":"info","message":"💾 Committing task changes (0 files modified)","timestamp":"2025-07-26 23:04:04.862"}
+{"level":"info","message":"📝 Staging all changes...","timestamp":"2025-07-26 23:04:04.862"}
+{"level":"info","message":"✨ Creating commit: fix(src): Fix Memory Leak in Data Processing\\n\\nRequirements:\\nThere is a memory leak in the data processing module that causes the application","timestamp":"2025-07-26 23:04:04.983"}
+{"level":"info","message":"🏷️  Creating task tag: task-fix-memory-leak-fix-memory-leak-in-data-proces","timestamp":"2025-07-26 23:04:05.031"}
+{"level":"info","message":"✅ Task tag created: task-fix-memory-leak-fix-memory-leak-in-data-proces","timestamp":"2025-07-26 23:04:05.093"}
+{"level":"info","message":"📤 Pushing session branch to remote...","timestamp":"2025-07-26 23:04:05.105"}
+{"level":"info","message":"✅ Session branch and tags pushed to remote","timestamp":"2025-07-26 23:04:07.293"}
+{"level":"info","message":"🎉 Task completed with 1 commit(s) and tagged!","timestamp":"2025-07-26 23:04:07.293"}
+{"level":"info","message":"🎉 Task 1/5 completed successfully! \u001b[35m[took 3s]\u001b[0m","timestamp":"2025-07-26 23:04:07.293"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:07.296"}
+{"level":"info","message":"📋 Task 2/5: Implement User Authentication System","timestamp":"2025-07-26 23:04:07.296"}
+{"level":"info","message":"──────────────────────────────────────────────────","timestamp":"2025-07-26 23:04:07.296"}
+{"level":"info","message":"🔧 Type: feature","timestamp":"2025-07-26 23:04:07.296"}
+{"level":"info","message":"⏱️  Estimated: 180 minutes","timestamp":"2025-07-26 23:04:07.296"}
+{"level":"info","message":"🆔 ID: implement-user-auth","timestamp":"2025-07-26 23:04:07.297"}
+{"level":"info","message":"📌 Using session branch for task: Implement User Authentication System","timestamp":"2025-07-26 23:04:07.297"}
+{"level":"info","message":"🤖 Executing task with Claude Code (timeout: 180min)","timestamp":"2025-07-26 23:04:07.299"}
+{"level":"info","message":"🔄 Dry run mode - skipping actual execution","timestamp":"2025-07-26 23:04:07.300"}
+{"level":"info","message":"🔍 Validating task completion...","timestamp":"2025-07-26 23:04:07.300"}
+{"level":"info","message":"🧪 Running custom validation script...","timestamp":"2025-07-26 23:04:07.300"}
+{"level":"warn","message":"⚠️  No files were modified during execution","timestamp":"2025-07-26 23:04:07.495"}
+{"level":"info","message":"🔍 Running project validation...","timestamp":"2025-07-26 23:04:07.496"}
+{"level":"info","message":"✅ Project validation passed","timestamp":"2025-07-26 23:04:08.136"}
+{"level":"info","message":"❌ Task validation completed (1 errors, 1 warnings)","timestamp":"2025-07-26 23:04:08.137"}
+{"level":"error","message":"❌ Task 2/5 failed: Task validation failed: Custom validation script failed: Debugger listening on ws://127.0.0.1:59672/37f81457-4c4d-4d8a-9e9c-56d361562732\nFor help, see: https://nodejs.org/en/docs/inspector\nDebugger attached.\nWaiting for the debugger to disconnect...\nnode:internal/modules/cjs/loader:1372\n  throw err;\n  ^\n\nError: Cannot find module '/Users/paolobarbato/Documents/Development/nightly-claude-code/@nightly-code/orchestrator/scripts/validate-auth.js'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1369:15)\n    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)\n    at Module._load (node:internal/modules/cjs/loader:1179:37)\n    at TracingChannel.traceSync (node:diagnostics_channel:322:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:152:5)\n    at node:internal/main/run_main_module:33:47 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v24.4.1\n","timestamp":"2025-07-26 23:04:08.137"}
+{"level":"info","message":"🔄 Reverting task changes for: Implement User Authentication System","timestamp":"2025-07-26 23:04:08.137"}
+{"level":"info","message":"🌟 Switching back to main...","timestamp":"2025-07-26 23:04:08.199"}
+{"level":"error","message":"❌ Failed to revert task changes: error: Your local changes to the following files would be overwritten by checkout:\n\t@nightly-code/orchestrator/.nightly-code/logs/session-2025-07-26-210401.log\nPlease commit your changes or stash them before you switch branches.\nAborting\n","timestamp":"2025-07-26 23:04:08.230"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"📋 Task 3/5: Refactor API Route Handlers for Better Maintainability","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"──────────────────────────────────────────────────","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"🔧 Type: refactor","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"⏱️  Estimated: 150 minutes","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"🆔 ID: refactor-api-handlers","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"📌 Using session branch for task: Refactor API Route Handlers for Better Maintainability","timestamp":"2025-07-26 23:04:08.231"}
+{"level":"info","message":"🤖 Executing task with Claude Code (timeout: 150min)","timestamp":"2025-07-26 23:04:08.233"}
+{"level":"info","message":"🔄 Dry run mode - skipping actual execution","timestamp":"2025-07-26 23:04:08.233"}
+{"level":"info","message":"🔍 Validating task completion...","timestamp":"2025-07-26 23:04:08.233"}
+{"level":"warn","message":"⚠️  No files were modified during execution","timestamp":"2025-07-26 23:04:08.233"}
+{"level":"info","message":"🔍 Running project validation...","timestamp":"2025-07-26 23:04:08.233"}
+{"level":"info","message":"✅ Project validation passed","timestamp":"2025-07-26 23:04:08.829"}
+{"level":"info","message":"✅ Task validation completed (0 errors, 1 warnings)","timestamp":"2025-07-26 23:04:08.830"}
+{"level":"info","message":"💾 Committing task changes (0 files modified)","timestamp":"2025-07-26 23:04:08.830"}
+{"level":"info","message":"📝 Staging all changes...","timestamp":"2025-07-26 23:04:08.830"}
+{"level":"info","message":"✨ Creating commit: refactor(src): Refactor API Route Handlers for Better Maintainabi\\n\\nRequirements:\\nThe current API route handlers have grown large and complex, making them","timestamp":"2025-07-26 23:04:08.946"}
+{"level":"info","message":"🏷️  Creating task tag: task-refactor-api-handlers-refactor-api-route-handlers-fo","timestamp":"2025-07-26 23:04:08.988"}
+{"level":"info","message":"✅ Task tag created: task-refactor-api-handlers-refactor-api-route-handlers-fo","timestamp":"2025-07-26 23:04:09.049"}
+{"level":"info","message":"📤 Pushing session branch to remote...","timestamp":"2025-07-26 23:04:09.062"}
+{"level":"info","message":"✅ Session branch and tags pushed to remote","timestamp":"2025-07-26 23:04:11.117"}
+{"level":"info","message":"🎉 Task completed with 1 commit(s) and tagged!","timestamp":"2025-07-26 23:04:11.118"}
+{"level":"info","message":"🎉 Task 3/5 completed successfully! \u001b[35m[took 3s]\u001b[0m","timestamp":"2025-07-26 23:04:11.118"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:11.119"}
+{"level":"info","message":"📋 Task 4/5: Add Comprehensive Integration Tests","timestamp":"2025-07-26 23:04:11.119"}
+{"level":"info","message":"──────────────────────────────────────────────────","timestamp":"2025-07-26 23:04:11.120"}
+{"level":"info","message":"🔧 Type: test","timestamp":"2025-07-26 23:04:11.120"}
+{"level":"info","message":"⏱️  Estimated: 120 minutes","timestamp":"2025-07-26 23:04:11.120"}
+{"level":"info","message":"🆔 ID: add-integration-tests","timestamp":"2025-07-26 23:04:11.120"}
+{"level":"info","message":"📌 Using session branch for task: Add Comprehensive Integration Tests","timestamp":"2025-07-26 23:04:11.120"}
+{"level":"info","message":"🤖 Executing task with Claude Code (timeout: 120min)","timestamp":"2025-07-26 23:04:11.122"}
+{"level":"info","message":"🔄 Dry run mode - skipping actual execution","timestamp":"2025-07-26 23:04:11.123"}
+{"level":"info","message":"🔍 Validating task completion...","timestamp":"2025-07-26 23:04:11.123"}
+{"level":"warn","message":"⚠️  No files were modified during execution","timestamp":"2025-07-26 23:04:11.123"}
+{"level":"info","message":"🔍 Running project validation...","timestamp":"2025-07-26 23:04:11.123"}
+{"level":"info","message":"✅ Project validation passed","timestamp":"2025-07-26 23:04:11.764"}
+{"level":"info","message":"✅ Task validation completed (0 errors, 1 warnings)","timestamp":"2025-07-26 23:04:11.765"}
+{"level":"info","message":"💾 Committing task changes (0 files modified)","timestamp":"2025-07-26 23:04:11.765"}
+{"level":"info","message":"📝 Staging all changes...","timestamp":"2025-07-26 23:04:11.765"}
+{"level":"info","message":"✨ Creating commit: test(test): Add Comprehensive Integration Tests\\n\\nRequirements:\\nAdd comprehensive integration tests to improve code quality and prevent","timestamp":"2025-07-26 23:04:11.880"}
+{"level":"info","message":"🏷️  Creating task tag: task-add-integration-tests-add-comprehensive-integration-","timestamp":"2025-07-26 23:04:11.925"}
+{"level":"info","message":"✅ Task tag created: task-add-integration-tests-add-comprehensive-integration-","timestamp":"2025-07-26 23:04:11.993"}
+{"level":"info","message":"📤 Pushing session branch to remote...","timestamp":"2025-07-26 23:04:12.021"}
+{"level":"info","message":"✅ Session branch and tags pushed to remote","timestamp":"2025-07-26 23:04:14.147"}
+{"level":"info","message":"🎉 Task completed with 1 commit(s) and tagged!","timestamp":"2025-07-26 23:04:14.147"}
+{"level":"info","message":"🎉 Task 4/5 completed successfully! \u001b[35m[took 3s]\u001b[0m","timestamp":"2025-07-26 23:04:14.148"}
+{"level":"info","message":"","timestamp":"2025-07-26 23:04:14.149"}
+{"level":"info","message":"📋 Task 5/5: Update API Documentation","timestamp":"2025-07-26 23:04:14.149"}
+{"level":"info","message":"──────────────────────────────────────────────────","timestamp":"2025-07-26 23:04:14.149"}
+{"level":"info","message":"🔧 Type: docs","timestamp":"2025-07-26 23:04:14.150"}
+{"level":"info","message":"⏱️  Estimated: 75 minutes","timestamp":"2025-07-26 23:04:14.150"}
+{"level":"info","message":"🆔 ID: update-api-documentation","timestamp":"2025-07-26 23:04:14.150"}
+{"level":"info","message":"📌 Using session branch for task: Update API Documentation","timestamp":"2025-07-26 23:04:14.150"}
+{"level":"info","message":"🤖 Executing task with Claude Code (timeout: 75min)","timestamp":"2025-07-26 23:04:14.152"}
+{"level":"info","message":"🔄 Dry run mode - skipping actual execution","timestamp":"2025-07-26 23:04:14.153"}
+{"level":"info","message":"🔍 Validating task completion...","timestamp":"2025-07-26 23:04:14.153"}
+{"level":"info","message":"🔍 Running project validation...","timestamp":"2025-07-26 23:04:14.153"}
+{"level":"info","message":"✅ Project validation passed","timestamp":"2025-07-26 23:04:14.759"}
+{"level":"info","message":"✅ Task validation completed (0 errors, 0 warnings)","timestamp":"2025-07-26 23:04:14.759"}
+{"level":"info","message":"💾 Committing task changes (0 files modified)","timestamp":"2025-07-26 23:04:14.760"}
+{"level":"info","message":"📝 Staging all changes...","timestamp":"2025-07-26 23:04:14.760"}
