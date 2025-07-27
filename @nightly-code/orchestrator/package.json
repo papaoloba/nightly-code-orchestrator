@@ -1,6 +1,6 @@
 {
   "name": "@papaoloba/nightly-code-orchestrator",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Automated 8-hour coding sessions using Claude Code",
   "main": "src/index.js",
   "bin": {

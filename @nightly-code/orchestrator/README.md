@@ -15,6 +15,7 @@ The Nightly Code Orchestrator transforms your development workflow by automating
 - **🤖 Automated 8-hour coding sessions** using Claude Code
 - **📋 YAML/JSON task management** with dependency resolution
 - **🔀 Advanced git integration** with automatic branching and PR creation
+- **📝 Commit message convention** for task tracking
 - **✅ Comprehensive validation** system for code quality
 - **📊 Detailed reporting** and notifications
 - **⏰ Cross-platform scheduling** (cron, Task Scheduler)
@@ -460,6 +461,97 @@ For improving code structure:
   estimated_duration: 180
   tags: ["refactor", "architecture"]
 ```
+
+## Git Integration and Commit Convention
+
+### Commit Message Convention
+
+Nightly Code uses a structured commit message convention for tracking task completion. This provides better integration with standard git workflows and improved searchability.
+
+#### Convention Format
+
+```
+<type>(<scope>): <description> [task:<task-id>]
+
+<body>
+
+Task-ID: <task-id>
+Task-Title: <full task title>
+Task-Type: <feature|bugfix|refactor|test|docs>
+Task-Status: completed
+Task-Duration: <duration in seconds>
+Task-Session: <session-id>
+Task-Date: <ISO timestamp>
+```
+
+#### Example Commits
+
+**Single Commit Task:**
+```
+feat(auth): implement user login [task:auth-001]
+
+Implemented JWT-based authentication with refresh tokens.
+
+Task-ID: auth-001
+Task-Title: Implement user authentication system
+Task-Type: feature
+Task-Status: completed
+Task-Duration: 3600
+Task-Session: session-2024-01-20-120000
+Task-Date: 2024-01-20T12:00:00Z
+```
+
+**Multi-Commit Task:**
+```
+# Progress commits
+feat(ui): add dashboard layout [task:ui-005] [1/3]
+feat(ui): implement dashboard widgets [task:ui-005] [2/3]
+
+# Final commit
+feat(ui): complete dashboard implementation [task:ui-005] [3/3]
+
+Finalized dashboard with all widgets and responsive design.
+
+Task-ID: ui-005
+Task-Title: Create user dashboard with analytics widgets
+Task-Type: feature
+Task-Status: completed
+Task-Duration: 7200
+Task-Session: session-2024-01-20-090000
+Task-Date: 2024-01-20T11:00:00Z
+```
+
+### Finding Task Commits
+
+```bash
+# Find all task completions
+git log --grep="\[task:" --oneline
+
+# Find specific task
+git log --grep="\[task:auth-001\]"
+
+# List completed tasks with details
+git log --grep="Task-Status: completed" --pretty=format:"%h %s %ad" --date=short
+
+# Export task report
+git log --grep="Task-Status: completed" --pretty=format:"%h|%s|%ad" --date=short > tasks.csv
+```
+
+### Git Hook Installation
+
+Install the commit-msg hook to validate task commits:
+
+```bash
+# Copy hook to your git directory
+cp node_modules/@papaoloba/nightly-code-orchestrator/hooks/commit-msg .git/hooks/
+chmod +x .git/hooks/commit-msg
+```
+
+The hook validates:
+- Proper commit format for task completions
+- Required metadata in commit footer
+- Task ID format and consistency
+- Conventional commit compliance
 
 ## Security and Safety
 

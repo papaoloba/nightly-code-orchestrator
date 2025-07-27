@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **BREAKING**: Removed git tag system for task tracking in favor of commit message convention
+- Task completion now tracked exclusively via `[task:<id>]` in commit messages
+- Added structured footer metadata to task completion commits for better tracking
+
+### Added
+- Commit message convention documentation (`docs/COMMIT_CONVENTION.md`)
+- Git commit-msg hook for validating task completion commits (`hooks/commit-msg`)
+- Support for multi-commit tasks with progress indicators `[1/3]`, `[2/3]`, etc.
+
+### Removed
+- **BREAKING**: Completely removed git tag creation system
+- Removed `createTaskTag()` method
+- Removed `taskTags` property from session branch tracking
+- Removed tag-related code from PR generation
+- Removed deprecated methods: `createPullRequest()`, `mergeTaskToMain()`, `pushBranch()`
+- Removed migration script (no longer needed)
+
 ## [1.0.0] - 2025-01-25
 
 ### Added

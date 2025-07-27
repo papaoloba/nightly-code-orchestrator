@@ -141,8 +141,7 @@ node_modules/
         branchName,
         sessionId,
         createdAt: Date.now(),
-        baseBranch: this.originalBranch,
-        taskTags: []
+        baseBranch: this.originalBranch
       };
       return branchName;
     }
@@ -174,8 +173,7 @@ node_modules/
         branchName,
         sessionId,
         createdAt: Date.now(),
-        baseBranch: this.originalBranch,
-        taskTags: []
+        baseBranch: this.originalBranch
       };
 
       this.logGitWithTiming('info', `✅ Session branch created successfully from updated ${this.originalBranch}`, 'create-session-branch');
@@ -255,8 +253,29 @@ node_modules/
       }
 
       const commits = [];
+      const totalCommits = commitChunks.length;
 
-      for (const chunk of commitChunks) {
+      for (let i = 0; i < commitChunks.length; i++) {
+        const chunk = commitChunks[i];
+        const isProgressCommit = i < totalCommits - 1;
+        const commitNumber = i + 1;
+        
+        // Generate appropriate commit message
+        let commitMessage;
+        if (chunk.message) {
+          // Use provided message if it already follows convention
+          commitMessage = chunk.message;
+        } else {
+          // Generate message following new convention
+          commitMessage = this.generateCommitMessage(
+            task, 
+            { ...result, summary: chunk.summary },
+            isProgressCommit,
+            commitNumber,
+            totalCommits
+          );
+        }
+
         // Add specific files for this chunk or all changes if none specified
         if (chunk.files && chunk.files.length > 0) {
           this.options.logger.info(`📝 Staging files for commit: ${chunk.files.join(', ')}`);
@@ -269,20 +288,20 @@ node_modules/
         }
 
         // Create commit
-        this.options.logger.info(`✨ Creating commit: ${chunk.message.split('\n')[0]}`);
-        const commitResult = await this.git.commit(chunk.message);
+        this.options.logger.info(`✨ Creating commit: ${commitMessage.split('\n')[0]}`);
+        const commitResult = await this.git.commit(commitMessage);
         commits.push(commitResult.commit);
       }
 
-      // Create task tag after all commits
-      await this.createTaskTag(task, commits);
+      // Task completion tracked via commit message convention
+      this.options.logger.info('📝 Task completion tracked via commit message convention');
 
       // Push to remote if configured
       if (this.options.autoPush) {
         await this.pushSessionBranch();
       }
 
-      this.options.logger.info(`🎉 Task completed with ${commits.length} commit(s) and tagged!`);
+      this.options.logger.info(`🎉 Task completed with ${commits.length} commit(s)!`);
 
       return commits;
     } catch (error) {
@@ -296,24 +315,36 @@ node_modules/
     return this.commitTaskChanges(task, result);
   }
 
-  generateCommitMessage (task, result) {
+  generateCommitMessage (task, result, isProgressCommit = false, commitNumber = null, totalCommits = null) {
     const type = this.getCommitType(task.type);
     const scope = this.extractScope(task);
     const description = task.title.slice(0, 50);
+    
+    // Add task ID to subject line
+    let subject = `${type}${scope}: ${description} [task:${task.id}]`;
+    
+    // Add progress indicator for multi-commit tasks
+    if (isProgressCommit && commitNumber && totalCommits) {
+      subject += ` [${commitNumber}/${totalCommits}]`;
+    }
 
-    let message = `${type}${scope}: ${description}`;
+    // For progress commits, keep the message shorter
+    if (isProgressCommit) {
+      return subject + '\\n\\n' + (result.summary || 'Work in progress on task implementation.');
+    }
+
+    // Full message for task completion
+    let message = subject;
 
     // Add body with more details
     const body = [];
 
     if (task.requirements) {
-      body.push('Requirements:');
       body.push(task.requirements.slice(0, 200) + (task.requirements.length > 200 ? '...' : ''));
       body.push('');
     }
 
     if (task.acceptance_criteria && task.acceptance_criteria.length > 0) {
-      body.push('Acceptance Criteria:');
       task.acceptance_criteria.forEach(criteria => {
         body.push(`- ${criteria}`);
       });
@@ -322,17 +353,24 @@ node_modules/
 
     if (result.filesChanged && result.filesChanged.length > 0) {
       body.push(`Files changed: ${result.filesChanged.slice(0, 5).join(', ')}${result.filesChanged.length > 5 ? '...' : ''}`);
+      body.push('');
     }
 
-    body.push('🤖 Generated with Nightly Code Orchestrator');
-    body.push('');
-    body.push(`Task ID: ${task.id}`);
-    body.push(`Duration: ${Math.round((result.duration || 0) / 1000)}s`);
-    body.push(`Session: ${new Date().toISOString()}`);
+    // Add structured footer with task metadata
+    const footer = [];
+    footer.push(`Task-ID: ${task.id}`);
+    footer.push(`Task-Title: ${task.title}`);
+    footer.push(`Task-Type: ${task.type || 'feature'}`);
+    footer.push(`Task-Status: completed`);
+    footer.push(`Task-Duration: ${Math.round((result.duration || 0) / 1000)}`);
+    footer.push(`Task-Session: ${this.sessionBranch?.sessionId || 'unknown'}`);
+    footer.push(`Task-Date: ${new Date().toISOString()}`);
 
     if (body.length > 0) {
-      message += `\\n\\n${body.join('\\n')}`;
+      message += '\\n\\n' + body.join('\\n');
     }
+    
+    message += '\\n\\n' + footer.join('\\n');
 
     return message;
   }
@@ -390,20 +428,13 @@ node_modules/
       // Push session branch to remote
       await this.git.push('origin', this.sessionBranch.branchName, ['--set-upstream']);
 
-      // Push tags
-      await this.git.pushTags('origin');
-
-      this.options.logger.info('✅ Session branch and tags pushed to remote');
+      this.options.logger.info('✅ Session branch pushed to remote');
     } catch (error) {
       this.options.logger.warn(`⚠️  Failed to push session branch: ${error.message}`);
       // Don't throw error, as this is not critical for local development
     }
   }
 
-  async pushBranch (task) {
-    // Backward compatibility wrapper
-    return this.pushSessionBranch();
-  }
 
   async createSessionPR (sessionResults) {
     if (this.options.dryRun) {
@@ -453,72 +484,8 @@ node_modules/
     }
   }
 
-  async createPullRequest (task, result) {
-    // Deprecated: Use createSessionPR instead
-    this.options.logger.info('📌 Task PR creation deferred to session end');
-  }
 
-  async createTaskTag (task, commits = []) {
-    if (this.options.dryRun) {
-      const sanitizedTitle = task.title
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .slice(0, 30);
-      const tagName = `task-${task.id}-${sanitizedTitle}`;
-      this.options.logger.info(`🔄 Dry run mode - would create task tag: ${tagName}`);
 
-      // Still add to session branch tracking for dry run
-      if (this.sessionBranch) {
-        this.sessionBranch.taskTags.push({
-          tagName,
-          taskId: task.id,
-          commits,
-          createdAt: Date.now()
-        });
-      }
-
-      return tagName;
-    }
-
-    try {
-      const sanitizedTitle = task.title
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .slice(0, 30);
-
-      const tagName = `task-${task.id}-${sanitizedTitle}`;
-      const tagMessage = `Task completed: ${task.title}\n\nCommits: ${commits.length}\nTask ID: ${task.id}\nTimestamp: ${new Date().toISOString()}`;
-
-      this.options.logger.info(`🏷️  Creating task tag: ${tagName}`);
-
-      // Create annotated tag
-      await this.git.addTag(tagName, tagMessage);
-
-      // Add to session branch tracking
-      if (this.sessionBranch) {
-        this.sessionBranch.taskTags.push({
-          tagName,
-          taskId: task.id,
-          commits,
-          createdAt: Date.now()
-        });
-      }
-
-      this.options.logger.info(`✅ Task tag created: ${tagName}`);
-
-      return tagName;
-    } catch (error) {
-      this.options.logger.error(`❌ Failed to create task tag: ${error.message}`);
-      throw new Error(`Failed to create tag for task ${task.id}: ${error.message}`);
-    }
-  }
-
-  async mergeTaskToMain (task) {
-    // Deprecated: Tasks now stay on session branch until session end
-    this.options.logger.info('📌 Task completed on session branch (will be merged at session end)');
-  }
 
   async generateSessionPRBody (sessionResults) {
     const body = [];
@@ -536,11 +503,9 @@ node_modules/
             body.push(`**Files changed:** ${task.result.filesChanged.join(', ')}`);
           }
 
-          // Find associated tag
-          const taskTag = this.sessionBranch?.taskTags.find(tag => tag.taskId === task.id);
-          if (taskTag) {
-            body.push(`**Tag:** \`${taskTag.tagName}\``);
-          }
+          // Show task ID from commit convention
+          body.push(`**Task ID:** \`${task.id}\` (tracked via commit convention)`);
+          body.push(`**Commits:** Look for \`[task:${task.id}]\` in commit messages`);
 
           body.push('');
         }
@@ -555,19 +520,18 @@ node_modules/
       body.push('');
     }
 
-    body.push('## Session Tags');
-    if (this.sessionBranch && this.sessionBranch.taskTags.length > 0) {
-      this.sessionBranch.taskTags.forEach(tag => {
-        body.push(`- \`${tag.tagName}\` (${tag.commits.length} commits)`);
-      });
-    } else {
-      body.push('No task tags created in this session.');
-    }
+    body.push('## Task Tracking');
+    body.push('Tasks are tracked using commit message convention.');
+    body.push('');
+    body.push('To find commits for a specific task, use:');
+    body.push('```bash');
+    body.push(`git log --grep="\\[task:" --oneline`);
+    body.push('```');
     body.push('');
 
     body.push('## Test Plan');
     body.push('- [ ] Manual testing completed');
-    body.push('- [ ] All task tags verified');
+    body.push('- [ ] All task commits verified with proper convention');
     body.push('- [ ] Session branch review completed');
     body.push('');
 
@@ -789,7 +753,7 @@ All successful tasks merged to main
     }
   }
 
-  async cleanupSessionBranches (keepSuccessful = true) {
+  async cleanupSessionBranches () {
     if (this.options.dryRun) {
       this.options.logger.info('🔄 Dry run mode - would clean up session branches');
       return;
