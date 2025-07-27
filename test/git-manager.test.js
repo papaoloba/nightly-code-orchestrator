@@ -30,13 +30,13 @@ describe('GitManager', () => {
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
-    
+
     // Mock simpleGit to return our mock instance
     simpleGit.mockReturnValue(mockGitInstance);
-    
+
     // Configure mock git instance
     mockGitInstance.checkIsRepo.mockResolvedValue(true);
-    mockGitInstance.status.mockResolvedValue({ 
+    mockGitInstance.status.mockResolvedValue({
       current: 'main',
       files: []
     });
@@ -49,7 +49,7 @@ describe('GitManager', () => {
     mockGitInstance.getRemotes.mockResolvedValue([{ name: 'origin' }]);
     mockGitInstance.branchLocal.mockResolvedValue({ all: [] });
     mockGitInstance.deleteLocalBranch.mockResolvedValue();
-    
+
     // Mock fs.pathExists for working directory
     fs.pathExists = jest.fn().mockResolvedValue(true);
 
@@ -65,7 +65,7 @@ describe('GitManager', () => {
       logger: mockLogger,
       prStrategy: 'task' // Default to task-based PRs
     });
-    
+
     // Set originalBranch since it would be set by ensureRepository
     gitManager.originalBranch = 'main';
   });
@@ -127,7 +127,7 @@ describe('GitManager', () => {
 
       // Create first task branch
       const depBranchName = await gitManager.createTaskBranch(dependencyTask);
-      
+
       // Create dependent task branch
       const taskBranchName = await gitManager.createTaskBranch(dependentTask);
 
@@ -150,7 +150,7 @@ describe('GitManager', () => {
 
     test('should throw error when originalBranch is not set', async () => {
       gitManager.originalBranch = null;
-      
+
       const task = {
         id: 'task-001',
         title: 'Test task',
@@ -246,7 +246,7 @@ describe('GitManager', () => {
   describe('Branch Cleanup', () => {
     test('should clean up task branches when using task PR strategy', async () => {
       gitManager.options.prStrategy = 'task';
-      
+
       gitManager.taskBranches.set('task-001', {
         branchName: 'nightly-feature-task-001-test',
         baseBranch: 'main'
@@ -293,7 +293,7 @@ describe('GitManager', () => {
     });
 
     test('should accept session PR strategy', () => {
-      const gm = new GitManager({ 
+      const gm = new GitManager({
         logger: mockLogger,
         prStrategy: 'session'
       });

@@ -2,8 +2,33 @@ const fs = require('fs-extra');
 const path = require('path');
 const YAML = require('yaml');
 const Joi = require('joi');
+const { TIME } = require('./constants');
+const { createErrorHandler } = require('./error-handler');
+const { ValidationError: CustomValidationError, FileSystemError } = require('./errors');
 
+/**
+ * TaskManager handles loading, validation, and management of tasks for nightly-claude-code
+ * Provides centralized task configuration management with validation and error handling
+ *
+ * @class TaskManager
+ * @example
+ * const taskManager = new TaskManager({
+ *   tasksPath: 'my-tasks.yaml',
+ *   workingDir: '/path/to/project',
+ *   logger: myLogger
+ * });
+ *
+ * const tasks = await taskManager.loadTasks();
+ */
 class TaskManager {
+  /**
+   * Create a new TaskManager instance
+   *
+   * @param {Object} options - Configuration options
+   * @param {string} [options.tasksPath='nightly-tasks.yaml'] - Path to tasks configuration file
+   * @param {string} [options.workingDir=process.cwd()] - Working directory for relative paths
+   * @param {Object} [options.logger=console] - Logger instance for output
+   */
   constructor (options = {}) {
     this.options = {
       tasksPath: options.tasksPath || 'nightly-tasks.yaml',
@@ -13,8 +38,16 @@ class TaskManager {
 
     this.taskSchema = this.createTaskSchema();
     this.tasks = [];
+    this.errorHandler = createErrorHandler('TaskManager', this.options.logger);
   }
 
+  /**
+   * Create Joi validation schema for task objects
+   * Defines the structure and validation rules for individual tasks
+   *
+   * @private
+   * @returns {Object} Joi schema object for task validation
+   */
   createTaskSchema () {
     return Joi.object({
       id: Joi.string().required().pattern(/^[a-zA-Z0-9-_]+$/),
@@ -29,7 +62,7 @@ class TaskManager {
       files_to_modify: Joi.array().items(Joi.string()).default([]),
       custom_validation: Joi.object({
         script: Joi.string(),
-        timeout: Joi.number().integer().min(1).max(600).default(300)
+        timeout: Joi.number().integer().min(1).max(600).default(TIME.SECONDS.DEFAULT_TASK_TIMEOUT)
       }).optional(),
       enabled: Joi.boolean().default(true),
       created_at: Joi.date().default(() => new Date()),
@@ -37,69 +70,125 @@ class TaskManager {
     });
   }
 
+  /**
+   * Load and validate tasks from the configured tasks file
+   * Supports both YAML and JSON formats with automatic detection
+   *
+   * @async
+   * @returns {Promise<Array>} Array of validated and enabled tasks
+   * @throws {FileSystemError} When tasks file cannot be found or read
+   * @throws {ValidationError} When task validation fails
+   *
+   * @example
+   * try {
+   *   const tasks = await taskManager.loadTasks();
+   *   console.log(`Loaded ${tasks.length} tasks`);
+   * } catch (error) {
+   *   console.error('Failed to load tasks:', error.message);
+   * }
+   */
   async loadTasks () {
     const tasksFilePath = path.resolve(this.options.workingDir, this.options.tasksPath);
 
     this.options.logger.info('Loading tasks from file', { tasksFilePath });
 
-    if (!await fs.pathExists(tasksFilePath)) {
-      throw new Error(`Tasks file not found: ${tasksFilePath}`);
-    }
-
-    try {
-      const fileContent = await fs.readFile(tasksFilePath, 'utf8');
-      let tasksData;
-
-      // Support both YAML and JSON formats
-      if (tasksFilePath.endsWith('.yaml') || tasksFilePath.endsWith('.yml')) {
-        tasksData = YAML.parse(fileContent);
-      } else if (tasksFilePath.endsWith('.json')) {
-        tasksData = JSON.parse(fileContent);
-      } else {
-        // Try to parse as YAML first, then JSON
-        try {
-          tasksData = YAML.parse(fileContent);
-        } catch (yamlError) {
-          tasksData = JSON.parse(fileContent);
+    return this.errorHandler.executeWithRetry(
+      async () => {
+        if (!await fs.pathExists(tasksFilePath)) {
+          throw new FileSystemError(`Tasks file not found: ${tasksFilePath}`, tasksFilePath, 'read');
         }
+
+        return this._performTaskLoading(tasksFilePath);
+      },
+      {
+        operationName: 'Load Tasks',
+        maxRetries: 2, // Allow retries for transient file system issues
+        critical: true
       }
-
-      // Validate tasks structure
-      if (!tasksData || !tasksData.tasks || !Array.isArray(tasksData.tasks)) {
-        throw new Error('Invalid tasks file format. Expected { tasks: [...] }');
-      }
-
-      // Validate and process each task
-      const validatedTasks = [];
-      for (const [index, task] of tasksData.tasks.entries()) {
-        try {
-          const validatedTask = await this.validateTask(task);
-          if (validatedTask.enabled) {
-            validatedTasks.push(validatedTask);
-          }
-        } catch (validationError) {
-          this.options.logger.error(`Task validation failed at index ${index}`, {
-            task: task.id || `task-${index}`,
-            error: validationError.message
-          });
-          throw new Error(`Task ${task.id || index} validation failed: ${validationError.message}`);
-        }
-      }
-
-      this.tasks = validatedTasks;
-
-      this.options.logger.info('Tasks loaded successfully', {
-        totalTasks: this.tasks.length,
-        enabledTasks: this.tasks.filter(t => t.enabled).length
-      });
-
-      return this.tasks;
-    } catch (error) {
-      this.options.logger.error('Failed to load tasks', { error: error.message });
-      throw new Error(`Failed to load tasks from ${tasksFilePath}: ${error.message}`);
-    }
+    );
   }
 
+  /**
+   * Internal method to perform the actual task loading and validation
+   * Separated for better error handling and retry logic
+   *
+   * @private
+   * @async
+   * @param {string} tasksFilePath - Absolute path to the tasks file
+   * @returns {Promise<Array>} Array of validated tasks
+   * @throws {ValidationError} When task structure or individual tasks are invalid
+   */
+  async _performTaskLoading (tasksFilePath) {
+    const fileContent = await fs.readFile(tasksFilePath, 'utf8');
+    let tasksData;
+
+    // Support both YAML and JSON formats
+    if (tasksFilePath.endsWith('.yaml') || tasksFilePath.endsWith('.yml')) {
+      tasksData = YAML.parse(fileContent);
+    } else if (tasksFilePath.endsWith('.json')) {
+      tasksData = JSON.parse(fileContent);
+    } else {
+      // Try to parse as YAML first, then JSON
+      try {
+        tasksData = YAML.parse(fileContent);
+      } catch (yamlError) {
+        tasksData = JSON.parse(fileContent);
+      }
+    }
+
+    // Validate tasks structure
+    if (!tasksData || !tasksData.tasks || !Array.isArray(tasksData.tasks)) {
+      throw new CustomValidationError('Invalid tasks file format. Expected { tasks: [...] }', 'tasks', tasksData);
+    }
+
+    // Validate and process each task
+    const validatedTasks = [];
+    for (const [index, task] of tasksData.tasks.entries()) {
+      try {
+        const validatedTask = await this.validateTask(task);
+        if (validatedTask.enabled) {
+          validatedTasks.push(validatedTask);
+        }
+      } catch (validationError) {
+        this.errorHandler.logError(validationError, {
+          operation: 'Task Validation',
+          taskIndex: index,
+          taskId: task.id || `task-${index}`
+        });
+        throw new CustomValidationError(
+          `Task ${task.id || index} validation failed: ${validationError.message}`,
+          task.id || `task-${index}`,
+          task
+        );
+      }
+    }
+
+    this.tasks = validatedTasks;
+
+    this.options.logger.info('Tasks loaded successfully', {
+      totalTasks: this.tasks.length,
+      enabledTasks: this.tasks.filter(t => t.enabled).length
+    });
+
+    return this.tasks;
+  }
+
+  /**
+   * Validate a single task against the schema and custom rules
+   *
+   * @async
+   * @param {Object} task - Task object to validate
+   * @returns {Promise<Object>} Validated and normalized task object
+   * @throws {ValidationError} When task validation fails
+   *
+   * @example
+   * const validatedTask = await taskManager.validateTask({
+   *   id: 'fix-bug-123',
+   *   type: 'bugfix',
+   *   title: 'Fix login issue',
+   *   requirements: 'Fix the authentication bug in login flow'
+   * });
+   */
   async validateTask (task) {
     const { error, value } = this.taskSchema.validate(task, {
       allowUnknown: true,
@@ -107,7 +196,12 @@ class TaskManager {
     });
 
     if (error) {
-      throw new Error(`Task validation failed: ${error.details.map(d => d.message).join(', ')}`);
+      const validationMessages = error.details.map(d => d.message).join(', ');
+      throw new CustomValidationError(
+        `Task validation failed: ${validationMessages}`,
+        error.details[0]?.path?.join('.') || 'unknown',
+        task
+      );
     }
 
     // Additional custom validations
@@ -116,11 +210,24 @@ class TaskManager {
     return value;
   }
 
+  /**
+   * Perform additional custom validations beyond schema validation
+   * Checks for business logic constraints like duplicate IDs and file patterns
+   *
+   * @async
+   * @param {Object} task - Task object to validate
+   * @throws {ValidationError} When custom validation rules fail
+   * @private
+   */
   async performCustomValidations (task) {
     // Check for duplicate task IDs
     const existingTask = this.tasks.find(t => t.id === task.id);
     if (existingTask) {
-      throw new Error(`Duplicate task ID: ${task.id}`);
+      throw new CustomValidationError(
+        `Duplicate task ID: ${task.id}`,
+        'id',
+        task.id
+      );
     }
 
     // Validate file patterns
@@ -361,7 +468,7 @@ class TaskManager {
       const duration = task.estimated_duration || 60;
       totalEstimation += duration;
 
-      if (breakdown.hasOwnProperty(task.type)) {
+      if (Object.prototype.hasOwnProperty.call(breakdown, task.type)) {
         breakdown[task.type] += duration;
       }
     }

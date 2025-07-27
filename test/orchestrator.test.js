@@ -530,13 +530,13 @@ describe('Orchestrator', () => {
 
     it('should create individual task PRs when using task strategy', async () => {
       mockGitManager.options.prStrategy = 'task';
-      
+
       const mockTask = {
         id: 'task-001',
         title: 'Test Task',
         type: 'feature'
       };
-      
+
       const mockResult = {
         success: true,
         filesChanged: ['src/test.js'],
@@ -558,7 +558,7 @@ describe('Orchestrator', () => {
     it('should create session PR when using session strategy', async () => {
       mockGitManager.options.prStrategy = 'session';
       orchestrator.options.dryRun = false;
-      
+
       const results = {
         completed: 2,
         failed: 0
@@ -596,7 +596,7 @@ describe('Orchestrator', () => {
     it('should clean up task branches when using task strategy', async () => {
       mockGitManager.options.prStrategy = 'task';
       orchestrator.options.dryRun = false;
-      
+
       const results = {
         completed: 1,
         failed: 0

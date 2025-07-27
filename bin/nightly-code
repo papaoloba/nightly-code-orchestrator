@@ -118,7 +118,7 @@ program
       console.log(chalk.blue('🎯 Starting coding session...'));
 
       // Determine PR strategy from CLI flags
-      let prStrategy = undefined;
+      let prStrategy;
       if (options.sessionPr) {
         prStrategy = 'session';
       } else if (options.taskPr) {

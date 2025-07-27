@@ -4,7 +4,7 @@ const { spawn } = require('cross-spawn');
 const { EventEmitter } = require('events');
 const winston = require('winston');
 const pidusage = require('pidusage');
-const YAML = require('js-yaml');
+const YAML = require('yaml');
 
 const { TaskManager } = require('./task-manager');
 const { GitManager } = require('./git-manager');
@@ -12,23 +12,66 @@ const { Validator } = require('./validator');
 const { Reporter } = require('./reporter');
 const { SuperClaudeIntegration } = require('./superclaude-integration');
 const { SUPERCLAUDE_OPTIMIZATION_GUIDE } = require('./superclaude-optimization-guide');
+const { TIME, STORAGE, RETRY, LIMITS } = require('./constants');
 
+/**
+ * Main orchestrator for nightly-claude-code automation
+ * Coordinates task execution, git operations, validation, and reporting
+ *
+ * @class Orchestrator
+ * @extends EventEmitter
+ *
+ * @fires Orchestrator#taskStarted - When a task begins execution
+ * @fires Orchestrator#taskCompleted - When a task completes successfully
+ * @fires Orchestrator#taskFailed - When a task fails
+ * @fires Orchestrator#sessionCompleted - When the entire session completes
+ *
+ * @example
+ * const orchestrator = new Orchestrator({
+ *   configPath: 'nightly-code.yaml',
+ *   tasksPath: 'nightly-tasks.yaml',
+ *   maxDuration: 28800, // 8 hours
+ *   dryRun: false
+ * });
+ *
+ * orchestrator.on('taskCompleted', (task) => {
+ *   console.log(`Task ${task.id} completed`);
+ * });
+ *
+ * await orchestrator.run();
+ */
 class Orchestrator extends EventEmitter {
+  /**
+   * Create a new Orchestrator instance
+   *
+   * @param {Object} options - Configuration options
+   * @param {string} [options.configPath='nightly-code.yaml'] - Path to main configuration file
+   * @param {string} [options.tasksPath='nightly-tasks.yaml'] - Path to tasks configuration file
+   * @param {number} [options.maxDuration=28800] - Maximum session duration in seconds (default: 8 hours)
+   * @param {number} [options.checkpointInterval=300] - Checkpoint interval in seconds (default: 5 minutes)
+   * @param {boolean} [options.dryRun=false] - Run in dry-run mode without making changes
+   * @param {string|null} [options.resumeCheckpoint=null] - Checkpoint to resume from
+   * @param {string} [options.workingDir=process.cwd()] - Working directory for operations
+   * @param {boolean} [options.forceSuperclaude=false] - Force SuperClaude integration
+   * @param {number} [options.rateLimitRetries=5] - Number of retries for rate limiting
+   * @param {number} [options.rateLimitBaseDelay=60000] - Base delay for rate limiting in milliseconds
+   * @param {boolean} [options.enableRetryOnLimits=true] - Enable retry on rate limits
+   */
   constructor (options = {}) {
     super();
 
     this.options = {
       configPath: options.configPath || 'nightly-code.yaml',
       tasksPath: options.tasksPath || 'nightly-tasks.yaml',
-      maxDuration: options.maxDuration || 28800, // 8 hours in seconds
-      checkpointInterval: options.checkpointInterval || 300, // 5 minutes
+      maxDuration: options.maxDuration || TIME.SECONDS.MAX_SESSION_DURATION,
+      checkpointInterval: options.checkpointInterval || TIME.SECONDS.DEFAULT_CHECKPOINT_INTERVAL,
       dryRun: options.dryRun || false,
       resumeCheckpoint: options.resumeCheckpoint || null,
       workingDir: options.workingDir || process.cwd(),
       forceSuperclaude: options.forceSuperclaude || false, // CLI flag to force SuperClaude
       // Rate limiting and retry configuration
-      rateLimitRetries: options.rateLimitRetries || 5,
-      rateLimitBaseDelay: options.rateLimitBaseDelay || 60000, // 1 minute
+      rateLimitRetries: options.rateLimitRetries || RETRY.DEFAULT_RETRIES,
+      rateLimitBaseDelay: options.rateLimitBaseDelay || TIME.MS.RATE_LIMIT_BASE_DELAY,
       enableRetryOnLimits: options.enableRetryOnLimits !== false // Default to true
     };
 
@@ -48,6 +91,12 @@ class Orchestrator extends EventEmitter {
     this.setupComponents();
   }
 
+  /**
+   * Generate a unique session ID based on current timestamp
+   * Format: session-YYYY-MM-DD-HHMMSS
+   *
+   * @returns {string} Unique session identifier
+   */
   generateSessionId () {
     const date = new Date().toISOString().split('T')[0];
     const time = new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '');
@@ -70,7 +119,7 @@ class Orchestrator extends EventEmitter {
     const duration = Date.now() - startTime;
     this.operationTimers.delete(operationName);
 
-    const seconds = Math.round(duration / 1000);
+    const seconds = Math.round(duration / TIME.MS.ONE_SECOND);
     const timeStr = seconds >= 60
       ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
       : `${seconds}s`;
@@ -83,6 +132,12 @@ class Orchestrator extends EventEmitter {
     this.logger[level](`${message}${timing}`);
   }
 
+  /**
+   * Initialize logging infrastructure with file and console transports
+   * Creates log directory structure and configures Winston logger
+   *
+   * @private
+   */
   setupLogging () {
     const logDir = path.join(this.options.workingDir, '.nightly-code', 'logs');
     fs.ensureDirSync(logDir);
@@ -106,7 +161,7 @@ class Orchestrator extends EventEmitter {
       // Add elapsed time since start if available
       let elapsedInfo = '';
       if (this.state.startTime) {
-        const elapsed = Math.round((Date.now() - this.state.startTime) / 1000);
+        const elapsed = Math.round((Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND);
         const minutes = Math.floor(elapsed / 60);
         const seconds = elapsed % 60;
         const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
@@ -149,7 +204,7 @@ class Orchestrator extends EventEmitter {
         let config;
 
         if (configPath.endsWith('.yaml') || configPath.endsWith('.yml')) {
-          config = YAML.load(content);
+          config = YAML.parse(content);
         } else {
           config = JSON.parse(content);
         }
@@ -246,6 +301,18 @@ class Orchestrator extends EventEmitter {
     this.superclaudeIntegration = null;
   }
 
+  /**
+   * Main orchestration method - executes the complete nightly code session
+   * Coordinates all phases: validation, task execution, git operations, and reporting
+   *
+   * @async
+   * @returns {Promise<Object>} Session results including metrics and task outcomes
+   * @throws {Error} When critical failures occur during orchestration
+   *
+   * @example
+   * const results = await orchestrator.run();
+   * console.log(`Completed ${results.completed} tasks, failed ${results.failed}`);
+   */
   async run () {
     try {
       this.logger.info('');
@@ -329,8 +396,8 @@ class Orchestrator extends EventEmitter {
 
     // Check available disk space
     const freeSpace = await this.getAvailableDiskSpace();
-    const freeSpaceGB = Math.round(freeSpace / 1000000000);
-    if (freeSpace < 1000000000) { // Less than 1GB
+    const freeSpaceGB = Math.round(freeSpace / STORAGE.BYTES_IN_GB);
+    if (freeSpace < STORAGE.MIN_DISK_SPACE_BYTES) {
       this.logger.warn(`⚠️  Low disk space: ${freeSpaceGB}GB available`);
     } else {
       this.logger.info(`💾 Disk space: ${freeSpaceGB}GB available`);
@@ -404,7 +471,7 @@ class Orchestrator extends EventEmitter {
 
       try {
         // Check time remaining
-        const elapsed = (Date.now() - this.state.startTime) / 1000;
+        const elapsed = (Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND;
         if (elapsed >= this.options.maxDuration) {
           this.logger.warn(`⏰ Maximum session duration reached (${Math.round(elapsed)}s)`);
           break;
@@ -417,7 +484,7 @@ class Orchestrator extends EventEmitter {
         // Task header
         this.logger.info('');
         this.logger.info(`📋 Task ${taskNum}/${totalTasks}: ${task.title}`);
-        this.logger.info('─'.repeat(50));
+        this.logger.info('─'.repeat(LIMITS.LOG_LINE_REPEAT_COUNT));
         this.logger.info(`🔧 Type: ${task.type}`);
         this.logger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
         this.logger.info(`🆔 ID: ${task.id}`);
@@ -438,7 +505,7 @@ class Orchestrator extends EventEmitter {
             // Commit changes to task branch (skip in dry-run mode)
             if (!this.options.dryRun) {
               await this.gitManager.commitTask(task, taskResult);
-              
+
               // Create individual PR if using task-based strategy
               if (this.gitManager.options.prStrategy === 'task') {
                 try {
@@ -509,10 +576,10 @@ class Orchestrator extends EventEmitter {
   }
 
   async executeTask (task) {
-    const timeoutMs = (task.estimated_duration || 60) * 60 * 1000; // Convert minutes to milliseconds
+    const timeoutMs = (task.estimated_duration || TIME.SECONDS.DEFAULT_TASK_DURATION_MINUTES) * 60 * TIME.MS.ONE_SECOND; // Convert minutes to milliseconds
     const prompt = await this.generateTaskPrompt(task);
 
-    const timeoutMinutes = Math.round(timeoutMs / 60000);
+    const timeoutMinutes = Math.round(timeoutMs / TIME.MS.ONE_MINUTE);
     this.logger.info('');
     this.logger.info(`\x1b[93m┌${'─'.repeat(68)}┐\x1b[0m`);
     this.logger.info(`\x1b[93m│\x1b[0m 🤖 \x1b[1mExecuting task with Claude Code\x1b[0m${' '.repeat(33)} \x1b[93m│\x1b[0m`);
@@ -540,7 +607,7 @@ class Orchestrator extends EventEmitter {
       });
 
       const duration = Date.now() - startTime;
-      const durationSeconds = Math.round(duration / 1000);
+      const durationSeconds = Math.round(duration / TIME.MS.ONE_SECOND);
 
       // Analyze changes made by Claude Code
       const filesChanged = await this.gitManager.getChangedFiles();
@@ -571,7 +638,7 @@ class Orchestrator extends EventEmitter {
   async executeClaudeCode (prompt, options = {}) {
     // Log the original prompt
     this.logPrompt(prompt, 'Original');
-    
+
     // Check if SuperClaude mode is active and optimize prompt
     if (this.superclaudeConfig?.enabled && this.superclaudeIntegration?.isEnabled()) {
       prompt = await this.optimizePromptWithSuperClaude(prompt);
@@ -583,7 +650,7 @@ class Orchestrator extends EventEmitter {
     }
 
     const maxRetries = options.maxRetries || this.options.rateLimitRetries || 5;
-    const baseDelay = options.baseDelay || this.options.rateLimitBaseDelay || 60000; // 1 minute default
+    const baseDelay = options.baseDelay || this.options.rateLimitBaseDelay || TIME.MS.RATE_LIMIT_BASE_DELAY;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -595,7 +662,7 @@ class Orchestrator extends EventEmitter {
         if (errorType === 'RATE_LIMIT' && this.options.rateLimitRetry) {
           if (attempt < maxRetries) {
             const delay = this.calculateBackoffDelay(attempt, baseDelay, errorType);
-            this.logger.warn(`🔄 Rate limit encountered. Waiting ${Math.round(delay / 1000)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
+            this.logger.warn(`🔄 Rate limit encountered. Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
 
             // Keep session alive during wait
             await this.waitWithProgress(delay, errorType);
@@ -607,7 +674,7 @@ class Orchestrator extends EventEmitter {
         } else if (errorType === 'USAGE_LIMIT' && this.options.usageLimitRetry) {
           if (attempt < maxRetries) {
             const delay = this.calculateBackoffDelay(attempt, baseDelay, errorType);
-            this.logger.warn(`🔄 Usage limit encountered. Waiting ${Math.round(delay / 1000)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
+            this.logger.warn(`🔄 Usage limit encountered. Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
 
             // Keep session alive during wait
             await this.waitWithProgress(delay, errorType);
@@ -625,8 +692,8 @@ class Orchestrator extends EventEmitter {
         } else {
           // For other errors, retry with shorter delay
           if (attempt < Math.min(maxRetries, 2)) {
-            const delay = 5000; // 5 seconds for general errors
-            this.logger.warn(`⚠️  Execution failed, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+            const delay = RETRY.GENERAL_ERROR_DELAY;
+            this.logger.warn(`⚠️  Execution failed, retrying in ${delay / TIME.MS.ONE_SECOND}s (attempt ${attempt + 1}/${maxRetries})...`);
             await this.sleep(delay);
             continue;
           } else {
@@ -688,7 +755,7 @@ class Orchestrator extends EventEmitter {
       const timeout = setTimeout(() => {
         child.kill('SIGTERM');
         reject(new Error(`Claude Code execution timed out after ${options.timeout}ms`));
-      }, options.timeout || 300000); // Default 5 minutes
+      }, options.timeout || TIME.MS.FIVE_MINUTES);
 
       child.on('close', (code) => {
         clearTimeout(timeout);
@@ -711,7 +778,7 @@ class Orchestrator extends EventEmitter {
 
       // Log the final prompt being sent
       this.logPrompt(prompt, 'Final');
-      
+
       // Send the prompt to Claude Code
       child.stdin.write(prompt);
       child.stdin.end();
@@ -803,7 +870,7 @@ class Orchestrator extends EventEmitter {
 
     while (Date.now() < endTime) {
       const remaining = endTime - Date.now();
-      const remainingMinutes = Math.ceil(remaining / 60000);
+      const remainingMinutes = Math.ceil(remaining / TIME.MS.ONE_MINUTE);
 
       if (remaining <= updateInterval) {
         await this.sleep(remaining);
@@ -830,10 +897,10 @@ class Orchestrator extends EventEmitter {
     try {
       // Execute Claude Code with the optimization prompt
       this.logger.info('📝 Running prompt optimization...');
-      
+
       // Log the optimization prompt itself
       this.logPrompt(optimizationPrompt, 'SuperClaude Optimization Request');
-      
+
       const result = await this.executeClaudeCodeSingle(optimizationPrompt, {
         timeout: 30000, // 30 second timeout for optimization
         workingDir: this.options.workingDir
@@ -912,7 +979,7 @@ class Orchestrator extends EventEmitter {
     const promptLines = prompt.split('\n');
     const maxPreviewLines = 50;
     const isLongPrompt = promptLines.length > maxPreviewLines;
-    
+
     // Categorize the prompt type
     let category = 'Standard';
     let emoji = '📝';
@@ -926,14 +993,14 @@ class Orchestrator extends EventEmitter {
       category = 'Final Execution';
       emoji = '🚀';
     }
-    
+
     // Detect command type
     let detectedCommand = 'None';
     const commandMatch = prompt.match(/^\/(\w+)/m);
     if (commandMatch) {
       detectedCommand = `/${commandMatch[1]}`;
     }
-    
+
     this.logger.info('');
     this.logger.info(`\x1b[95m╔${'═'.repeat(70)}╗\x1b[0m`);
     this.logger.info(`\x1b[95m║\x1b[0m ${emoji} \x1b[1m\x1b[95mCLAUDE PROMPT\x1b[0m - ${type.padEnd(48)} \x1b[95m║\x1b[0m`);
@@ -945,7 +1012,7 @@ class Orchestrator extends EventEmitter {
     this.logger.info(`\x1b[95m╠${'═'.repeat(70)}╣\x1b[0m`);
     this.logger.info(`\x1b[95m║\x1b[0m \x1b[1mContent Preview:\x1b[0m${' '.repeat(51)} \x1b[95m║\x1b[0m`);
     this.logger.info(`\x1b[95m╠${'═'.repeat(70)}╣\x1b[0m`);
-    
+
     // Log the prompt content with syntax highlighting
     const displayLines = isLongPrompt ? promptLines.slice(0, maxPreviewLines) : promptLines;
     displayLines.forEach(line => {
@@ -962,7 +1029,7 @@ class Orchestrator extends EventEmitter {
       } else if (line.startsWith('/')) {
         coloredLine = `\x1b[93m${line}\x1b[0m`; // Bright yellow for slash commands
       }
-      
+
       // Wrap long lines
       if (line.length > 68) {
         const wrapped = line.match(/.{1,68}/g) || [];
@@ -977,11 +1044,11 @@ class Orchestrator extends EventEmitter {
         this.logger.info(`\x1b[95m║\x1b[0m ${coloredLine.padEnd(68)} \x1b[95m║\x1b[0m`);
       }
     });
-    
+
     if (isLongPrompt) {
       this.logger.info(`\x1b[95m║\x1b[0m \x1b[90m... [${promptLines.length - maxPreviewLines} more lines truncated for display] ...\x1b[0m${' '.repeat(68 - 45 - (promptLines.length - maxPreviewLines).toString().length)} \x1b[95m║\x1b[0m`);
     }
-    
+
     this.logger.info(`\x1b[95m╚${'═'.repeat(70)}╝\x1b[0m`);
     this.logger.info('');
   }
@@ -1125,7 +1192,7 @@ Please implement this task now.`;
       if (task.custom_validation?.script) {
         this.logger.info('🧪 Running custom validation script...');
         const scriptResult = await this.executeCommand('node', [task.custom_validation.script], {
-          timeout: task.custom_validation.timeout * 1000 || 300000
+          timeout: task.custom_validation.timeout * TIME.MS.ONE_SECOND || TIME.MS.FIVE_MINUTES
         });
 
         if (scriptResult.code !== 0) {
@@ -1197,7 +1264,7 @@ Please implement this task now.`;
   startCheckpointTimer () {
     this.checkpointInterval = setInterval(async () => {
       await this.createCheckpoint();
-    }, this.options.checkpointInterval * 1000);
+    }, this.options.checkpointInterval * TIME.MS.ONE_SECOND);
   }
 
   async createCheckpoint () {
@@ -1261,7 +1328,7 @@ Please implement this task now.`;
       const timeout = setTimeout(() => {
         child.kill('SIGTERM');
         reject(new Error(`Command timed out: ${command} ${args.join(' ')}`));
-      }, options.timeout || 60000);
+      }, options.timeout || TIME.MS.DEFAULT_COMMAND_TIMEOUT);
 
       child.on('close', (code) => {
         clearTimeout(timeout);
@@ -1302,7 +1369,7 @@ Please implement this task now.`;
   async finalize (results) {
     this.state.endTime = Date.now();
     const duration = this.state.endTime - this.state.startTime;
-    const durationMinutes = Math.round(duration / 60000);
+    const durationMinutes = Math.round(duration / TIME.MS.ONE_MINUTE);
 
     this.logger.info('');
     this.logger.info('🏁 Finalizing Session');

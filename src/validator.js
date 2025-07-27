@@ -3,6 +3,7 @@ const path = require('path');
 const YAML = require('yaml');
 const Joi = require('joi');
 const { spawn } = require('cross-spawn');
+const { TIME, STORAGE, LIMITS, MEMORY } = require('./constants');
 
 class Validator {
   constructor (options = {}) {
@@ -20,10 +21,10 @@ class Validator {
   createConfigSchema () {
     return Joi.object({
       session: Joi.object({
-        max_duration: Joi.number().integer().min(300).max(28800).default(28800),
+        max_duration: Joi.number().integer().min(TIME.SECONDS.MIN_SESSION_DURATION).max(TIME.SECONDS.MAX_SESSION_DURATION).default(TIME.SECONDS.MAX_SESSION_DURATION),
         time_zone: Joi.string().default('UTC'),
         max_concurrent_tasks: Joi.number().integer().min(1).max(5).default(1),
-        checkpoint_interval: Joi.number().integer().min(60).max(3600).default(300)
+        checkpoint_interval: Joi.number().integer().min(TIME.SECONDS.MIN_CHECKPOINT_INTERVAL).max(TIME.SECONDS.MAX_CHECKPOINT_INTERVAL).default(TIME.SECONDS.DEFAULT_CHECKPOINT_INTERVAL)
       }).default(),
 
       project: Joi.object({
@@ -50,7 +51,7 @@ class Validator {
         custom_validators: Joi.array().items(Joi.object({
           name: Joi.string().required(),
           command: Joi.string().required(),
-          timeout: Joi.number().integer().min(1).max(3600).default(300),
+          timeout: Joi.number().integer().min(LIMITS.MIN_VALIDATOR_TIMEOUT).max(LIMITS.MAX_VALIDATOR_TIMEOUT).default(TIME.SECONDS.DEFAULT_TASK_TIMEOUT),
           required: Joi.boolean().default(true)
         })).default([])
       }).default(),
@@ -593,10 +594,10 @@ class Validator {
     // Check available disk space
     try {
       const freeSpace = await this.getAvailableDiskSpace();
-      if (freeSpace < 1000000000) { // Less than 1GB
+      if (freeSpace < STORAGE.MIN_DISK_SPACE_BYTES) {
         result.warnings.push({
           type: 'low_disk_space',
-          message: `Low disk space: ${Math.round(freeSpace / 1000000000)}GB available`,
+          message: `Low disk space: ${Math.round(freeSpace / STORAGE.BYTES_IN_GB)}GB available`,
           path: 'system'
         });
       }
@@ -823,7 +824,7 @@ class Validator {
 
       // Test cargo check
       try {
-        await this.executeCommand('cargo', ['check'], { timeout: 60000 });
+        await this.executeCommand('cargo', ['check'], { timeout: TIME.MS.CARGO_CHECK_TIMEOUT });
       } catch (error) {
         result.warnings.push({
           type: 'cargo_check_failed',
@@ -915,7 +916,7 @@ class Validator {
         if (memInfo.available < 2000000000) { // Less than 2GB
           result.warnings.push({
             type: 'low_memory',
-            message: `Low available memory: ${Math.round(memInfo.available / 1000000000)}GB`,
+            message: `Low available memory: ${Math.round(memInfo.available / MEMORY.BYTES_IN_GB)}GB`,
             path: 'system.memory'
           });
         }
@@ -1182,7 +1183,7 @@ Add usage instructions here.
       const timeout = setTimeout(() => {
         child.kill('SIGTERM');
         reject(new Error(`Command timed out: ${command} ${args.join(' ')}`));
-      }, options.timeout || 30000);
+      }, options.timeout || 30000); // 30 seconds default timeout
 
       child.on('close', (code) => {
         clearTimeout(timeout);

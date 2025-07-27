@@ -4,6 +4,7 @@ const nodemailer = require('nodemailer');
 const axios = require('axios');
 const { table } = require('table');
 const chalk = require('chalk');
+const { TIME } = require('./constants');
 
 class Reporter {
   constructor (options = {}) {
@@ -134,7 +135,7 @@ class Reporter {
         : 0,
 
       tasksPerHour: duration > 0
-        ? Math.round((results.completed / (duration / 3600000)) * 100) / 100
+        ? Math.round((results.completed / (duration / TIME.MS.ONE_HOUR)) * 100) / 100
         : 0,
 
       timeUtilization: duration > 0
@@ -166,7 +167,7 @@ class Reporter {
   }
 
   formatMarkdownReport (report) {
-    const duration = Math.round(report.duration / 60000); // Convert to minutes
+    const duration = Math.round(report.duration / TIME.MS.ONE_MINUTE); // Convert to minutes
     const successIcon = report.success ? '✅' : '❌';
 
     return `# Nightly Code Session Report ${successIcon}
@@ -188,7 +189,7 @@ class Reporter {
 | Metric | Value |
 |--------|-------|
 | Session Efficiency | ${report.metrics.sessionEfficiency}% |
-| Average Task Duration | ${Math.round(report.metrics.averageTaskDuration / 1000)}s |
+| Average Task Duration | ${Math.round(report.metrics.averageTaskDuration / TIME.MS.ONE_SECOND)}s |
 | Tasks per Hour | ${report.metrics.tasksPerHour} |
 | Time Utilization | ${report.metrics.timeUtilization}% |
 | Error Rate | ${report.metrics.errorRate}% |
@@ -202,7 +203,7 @@ ${report.taskDetails.completed.map(task => `
 
 - **ID:** ${task.id}
 - **Type:** ${task.type}
-- **Duration:** ${Math.round(task.duration / 1000)}s
+- **Duration:** ${Math.round(task.duration / TIME.MS.ONE_SECOND)}s
 - **Files Changed:** ${task.filesChanged}
 - **Completed:** ${new Date(task.completedAt).toLocaleString()}
 - **Validation:** ${task.validation.passed ? '✅ Passed' : '❌ Failed'}
@@ -261,7 +262,7 @@ ${report.branches.map(branch => `
   }
 
   formatHtmlReport (report) {
-    const duration = Math.round(report.duration / 60000);
+    const duration = Math.round(report.duration / TIME.MS.ONE_MINUTE);
     const successClass = report.success ? 'success' : 'failure';
 
     return `<!DOCTYPE html>
@@ -335,7 +336,7 @@ ${report.branches.map(branch => `
         <h2>Detailed Metrics</h2>
         <table>
             <tr><th>Metric</th><th>Value</th></tr>
-            <tr><td>Average Task Duration</td><td>${Math.round(report.metrics.averageTaskDuration / 1000)}s</td></tr>
+            <tr><td>Average Task Duration</td><td>${Math.round(report.metrics.averageTaskDuration / TIME.MS.ONE_SECOND)}s</td></tr>
             <tr><td>Time Utilization</td><td>${report.metrics.timeUtilization}%</td></tr>
             <tr><td>Error Rate</td><td>${report.metrics.errorRate}%</td></tr>
             <tr><td>Branches Created</td><td>${report.metrics.branchesCreated}</td></tr>
@@ -354,7 +355,7 @@ ${report.branches.map(branch => `
                 <div class="task-details">
                     <strong>ID:</strong> ${task.id} | 
                     <strong>Type:</strong> ${task.type} | 
-                    <strong>Duration:</strong> ${Math.round(task.duration / 1000)}s | 
+                    <strong>Duration:</strong> ${Math.round(task.duration / TIME.MS.ONE_SECOND)}s | 
                     <strong>Files:</strong> ${task.filesChanged} | 
                     <strong>Status:</strong> ${task.validation.passed ? '✅ Validated' : '❌ Validation Failed'}
                 </div>
@@ -458,7 +459,7 @@ ${report.branches.map(branch => `
   }
 
   async generateEmailContent (report) {
-    const duration = Math.round(report.duration / 60000);
+    const duration = Math.round(report.duration / TIME.MS.ONE_MINUTE);
     const statusEmoji = report.success ? '✅' : '❌';
 
     return `
@@ -483,7 +484,7 @@ ${report.branches.map(branch => `
             <h3 style="color: #28a745;">✅ Completed Tasks (${report.taskDetails.completed.length})</h3>
             <ul>
                 ${report.taskDetails.completed.map(task => `
-                <li><strong>${task.title}</strong> (${task.type}) - ${Math.round(task.duration / 1000)}s</li>
+                <li><strong>${task.title}</strong> (${task.type}) - ${Math.round(task.duration / TIME.MS.ONE_SECOND)}s</li>
                 `).join('')}
             </ul>
         </div>
@@ -524,7 +525,7 @@ ${report.branches.map(branch => `
   async sendSlackNotification (report, config) {
     this.options.logger.info('Sending Slack notification');
 
-    const duration = Math.round(report.duration / 60000);
+    const duration = Math.round(report.duration / TIME.MS.ONE_MINUTE);
     const statusEmoji = report.success ? ':white_check_mark:' : ':x:';
     const statusColor = report.success ? 'good' : 'danger';
 
@@ -568,7 +569,7 @@ ${report.branches.map(branch => `
               short: true
             }
           ],
-          ts: Math.floor(Date.now() / 1000)
+          ts: Math.floor(Date.now() / TIME.MS.ONE_SECOND)
         }
       ]
     };
@@ -746,7 +747,7 @@ ${report.branches.map(branch => `
 
     for (const report of reports) {
       const date = new Date(report.timestamp).toLocaleDateString();
-      const duration = Math.round(report.duration / 60000);
+      const duration = Math.round(report.duration / TIME.MS.ONE_MINUTE);
       const tasks = `${report.completedTasks}/${report.totalTasks}`;
       const status = report.success ? chalk.green('✅ Success') : chalk.red('❌ Failed');
 
@@ -799,7 +800,7 @@ ${report.branches.map(branch => `
 
     for (const report of reports) {
       const date = new Date(report.timestamp).toLocaleDateString();
-      const duration = Math.round(report.duration / 60000);
+      const duration = Math.round(report.duration / TIME.MS.ONE_MINUTE);
       const tasks = `${report.completedTasks}/${report.totalTasks}`;
       const status = report.success ? '✅ Success' : '❌ Failed';
 
@@ -873,7 +874,7 @@ ${report.branches.map(branch => `
       const row = [
         report.sessionId,
         report.timestamp,
-        Math.round(report.duration / 60000),
+        Math.round(report.duration / TIME.MS.ONE_MINUTE),
         report.totalTasks,
         report.completedTasks,
         report.failedTasks,
