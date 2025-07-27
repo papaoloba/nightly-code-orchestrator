@@ -1032,10 +1032,7 @@ class Orchestrator extends EventEmitter {
 
       if (superclaudePlan) {
         this.logger.info('🧠 Using SuperClaude Framework for task execution');
-        this.logger.info(`📋 Command: /${superclaudePlan.superclaudeCommand}`);
-        this.logger.info(`🔧 Tools: ${superclaudePlan.tools.join(', ')}`);
-
-        return superclaudePlan.enhancedPrompt;
+        // Continue with standard prompt generation - will be optimized by optimizePromptWithSuperClaude
       }
     }
 

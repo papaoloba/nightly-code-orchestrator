@@ -224,8 +224,7 @@ class SuperClaudeIntegration {
 
     this.options.logger.info(`🧠 Planning task with SuperClaude Framework: ${task.title}`);
 
-    // With optimizePromptWithSuperClaude, command selection is handled automatically
-    // Simply return the task for optimization by the orchestrator
+    // Simply return task info - actual command selection happens via optimizePromptWithSuperClaude
     return {
       taskId: task.id,
       title: task.title,

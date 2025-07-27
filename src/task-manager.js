@@ -199,7 +199,7 @@ class TaskManager {
       const validationMessages = error.details.map(d => d.message).join(', ');
       throw new CustomValidationError(
         `Task validation failed: ${validationMessages}`,
-        error.details[0]?.path?.join('.') || 'unknown',
+        error.details[0]?.path ? error.details[0].path.join('.') : 'unknown',
         task
       );
     }
