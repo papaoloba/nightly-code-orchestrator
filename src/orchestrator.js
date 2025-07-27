@@ -237,7 +237,7 @@ class Orchestrator extends EventEmitter {
             task_management: 'hierarchical',
             integration_level: 'deep'
           };
-          this.logger.info('🧠 SuperClaude mode enabled via CLI flag');
+          this.logger.info('  \x1b[35m🧠 SuperClaude\x1b[0m │ Mode enabled via CLI flag');
         }
 
         return config;
@@ -977,20 +977,20 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       child.stdout.on('data', (data) => {
         const output = data.toString();
         stdout += output;
-        // Display Claude Code output in real-time
+        // Display Claude Code output in real-time with improved formatting
         output.split('\n').forEach(line => {
           if (line.trim()) {
-            // Add different colors for different types of Claude output
+            // Add different colors and formatting for different types of Claude output
             if (line.includes('Wave') || line.includes('wave')) {
-              this.logger.info(`🤖 \x1b[35mClaude: ${line}\x1b[0m`); // Magenta for waves
+              this.logger.info(`  \x1b[35m🤖 Claude\x1b[0m │ \x1b[35m${line}\x1b[0m`); // Magenta for waves
             } else if (line.includes('✅') || line.includes('Success') || line.includes('Completed')) {
-              this.logger.info(`🤖 \x1b[32mClaude: ${line}\x1b[0m`); // Green for success
+              this.logger.info(`  \x1b[32m🤖 Claude\x1b[0m │ \x1b[32m${line}\x1b[0m`); // Green for success
             } else if (line.includes('❌') || line.includes('Error') || line.includes('Failed')) {
-              this.logger.info(`🤖 \x1b[31mClaude: ${line}\x1b[0m`); // Red for errors
+              this.logger.info(`  \x1b[31m🤖 Claude\x1b[0m │ \x1b[31m${line}\x1b[0m`); // Red for errors
             } else if (line.includes('⚠️') || line.includes('Warning')) {
-              this.logger.info(`🤖 \x1b[33mClaude: ${line}\x1b[0m`); // Yellow for warnings
+              this.logger.info(`  \x1b[33m🤖 Claude\x1b[0m │ \x1b[33m${line}\x1b[0m`); // Yellow for warnings
             } else {
-              this.logger.info(`🤖 Claude: ${line}`);
+              this.logger.info(`  \x1b[36m🤖 Claude\x1b[0m │ ${line}`); // Cyan for robot icon, normal text
             }
           }
         });
@@ -1191,7 +1191,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
         // Accept the command if it's different from original or starts with /sc:
         if (optimizedCommand !== originalPrompt || optimizedCommand.startsWith('/sc:')) {
-          this.logger.info(`✅ Prompt optimized to: ${optimizedCommand}`);
+          this.logger.info(`  \x1b[32m✅ Prompt optimized\x1b[0m │ \x1b[1m${optimizedCommand}\x1b[0m`);
           // Log the optimized prompt
           this.logPrompt(optimizedCommand, 'SuperClaude Optimized');
           return optimizedCommand;
@@ -1212,81 +1212,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   }
 
   logPrompt (prompt, type = 'Prompt') {
-    const promptLines = prompt.split('\n');
-    const maxPreviewLines = 50;
-    const isLongPrompt = promptLines.length > maxPreviewLines;
-
-    // Categorize the prompt type
-    let category = 'Standard';
-    let emoji = '📝';
-    if (type.includes('SuperClaude')) {
-      category = 'SuperClaude Framework';
-      emoji = '🧠';
-    } else if (type.includes('Optimization')) {
-      category = 'Optimization';
-      emoji = '✨';
-    } else if (type === 'Final') {
-      category = 'Final Execution';
-      emoji = '🚀';
-    }
-
-    // Detect command type
-    let detectedCommand = 'None';
-    const commandMatch = prompt.match(/^\/(\w+)/m);
-    if (commandMatch) {
-      detectedCommand = `/${commandMatch[1]}`;
-    }
-
-    this.logger.info('');
-    this.logger.info(`\x1b[95m╔${'═'.repeat(70)}╗\x1b[0m`);
-    this.logger.info(`\x1b[95m║\x1b[0m ${emoji} \x1b[1m\x1b[95mCLAUDE PROMPT\x1b[0m - ${type.padEnd(48)} \x1b[95m║\x1b[0m`);
-    this.logger.info(`\x1b[95m╠${'═'.repeat(70)}╣\x1b[0m`);
-    this.logger.info(`\x1b[95m║\x1b[0m \x1b[90mTimestamp:\x1b[0m ${new Date().toISOString().padEnd(55)} \x1b[95m║\x1b[0m`);
-    this.logger.info(`\x1b[95m║\x1b[0m \x1b[90mCategory:\x1b[0m  ${category.padEnd(55)} \x1b[95m║\x1b[0m`);
-    this.logger.info(`\x1b[95m║\x1b[0m \x1b[90mCommand:\x1b[0m   ${detectedCommand.padEnd(55)} \x1b[95m║\x1b[0m`);
-    this.logger.info(`\x1b[95m║\x1b[0m \x1b[90mLength:\x1b[0m    ${prompt.length.toString().padEnd(10)} characters, ${promptLines.length.toString().padEnd(6)} lines${' '.repeat(26)} \x1b[95m║\x1b[0m`);
-    this.logger.info(`\x1b[95m╠${'═'.repeat(70)}╣\x1b[0m`);
-    this.logger.info(`\x1b[95m║\x1b[0m \x1b[1mContent Preview:\x1b[0m${' '.repeat(51)} \x1b[95m║\x1b[0m`);
-    this.logger.info(`\x1b[95m╠${'═'.repeat(70)}╣\x1b[0m`);
-
-    // Log the prompt content with syntax highlighting
-    const displayLines = isLongPrompt ? promptLines.slice(0, maxPreviewLines) : promptLines;
-    displayLines.forEach(line => {
-      let coloredLine = line;
-      // Add some basic syntax highlighting
-      if (line.startsWith('#')) {
-        coloredLine = `\x1b[36m${line}\x1b[0m`; // Cyan for headers
-      } else if (line.startsWith('**') || line.startsWith('##')) {
-        coloredLine = `\x1b[33m${line}\x1b[0m`; // Yellow for emphasis
-      } else if (line.startsWith('-') || line.startsWith('*')) {
-        coloredLine = `\x1b[32m${line}\x1b[0m`; // Green for lists
-      } else if (line.includes('```')) {
-        coloredLine = `\x1b[35m${line}\x1b[0m`; // Magenta for code blocks
-      } else if (line.startsWith('/')) {
-        coloredLine = `\x1b[93m${line}\x1b[0m`; // Bright yellow for slash commands
-      }
-
-      // Wrap long lines
-      if (line.length > 68) {
-        const wrapped = line.match(/.{1,68}/g) || [];
-        wrapped.forEach((segment, index) => {
-          if (index === 0) {
-            this.logger.info(`\x1b[95m║\x1b[0m ${coloredLine.substring(0, 68)} \x1b[95m║\x1b[0m`);
-          } else {
-            this.logger.info(`\x1b[95m║\x1b[0m ${segment.padEnd(68)} \x1b[95m║\x1b[0m`);
-          }
-        });
-      } else {
-        this.logger.info(`\x1b[95m║\x1b[0m ${coloredLine.padEnd(68)} \x1b[95m║\x1b[0m`);
-      }
-    });
-
-    if (isLongPrompt) {
-      this.logger.info(`\x1b[95m║\x1b[0m \x1b[90m... [${promptLines.length - maxPreviewLines} more lines truncated for display] ...\x1b[0m${' '.repeat(68 - 45 - (promptLines.length - maxPreviewLines).toString().length)} \x1b[95m║\x1b[0m`);
-    }
-
-    this.logger.info(`\x1b[95m╚${'═'.repeat(70)}╝\x1b[0m`);
-    this.logger.info('');
+    // Removed fuchsia box logging - now this method does nothing
+    // This keeps the method calls intact but removes the visual output
   }
 
   async generateTaskPrompt (task) {
@@ -1295,13 +1222,13 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       const superclaudePlan = await this.superclaudeIntegration.planTask(task);
 
       if (superclaudePlan) {
-        this.logger.info('🧠 Using SuperClaude Framework for task execution');
+        this.logger.info('  \x1b[35m🧠 SuperClaude Framework\x1b[0m │ Task execution mode activated');
         // Continue with standard prompt generation - will be optimized by optimizePromptWithSuperClaude
       }
     }
 
     // Fallback to standard prompt generation
-    this.logger.info('🤖 Using standard task execution');
+    this.logger.info('  \x1b[36m🤖 Standard mode\x1b[0m │ Task execution');
 
     // Load project context
     const projectContext = await this.gatherProjectContext();
