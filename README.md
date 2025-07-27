@@ -21,6 +21,7 @@ The Nightly Code Orchestrator transforms your development workflow by automating
 - **⏰ Cross-platform scheduling** (cron, Task Scheduler)
 - **🔒 Security-first** approach with sandboxing options
 - **🏗️ Production-ready** with extensive error handling
+- **🧠 SuperClaude integration** for automatic prompt optimization
 
 ## Quick Start
 
@@ -137,6 +138,14 @@ notifications:
   slack:
     enabled: false
     # webhook_url: "https://hooks.slack.com/services/..."
+
+# SuperClaude Framework integration
+superclaude:
+  enabled: false  # Enable automatic prompt optimization
+  planning_mode: intelligent
+  execution_mode: assisted
+  task_management: hierarchical
+  integration_level: deep
 ```
 
 ### Task Definition (`nightly-tasks.yaml`)

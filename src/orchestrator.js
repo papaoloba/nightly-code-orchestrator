@@ -24,6 +24,7 @@ class Orchestrator extends EventEmitter {
       dryRun: options.dryRun || false,
       resumeCheckpoint: options.resumeCheckpoint || null,
       workingDir: options.workingDir || process.cwd(),
+      forceSuperclaude: options.forceSuperclaude || false, // CLI flag to force SuperClaude
       // Rate limiting and retry configuration
       rateLimitRetries: options.rateLimitRetries || 5,
       rateLimitBaseDelay: options.rateLimitBaseDelay || 60000, // 1 minute
@@ -167,11 +168,36 @@ class Orchestrator extends EventEmitter {
         // Store SuperClaude configuration
         this.superclaudeConfig = config.superclaude || null;
 
+        // Apply CLI override if --superclaude flag was used
+        if (this.options.forceSuperclaude) {
+          this.superclaudeConfig = {
+            enabled: true,
+            planning_mode: 'intelligent',
+            execution_mode: 'assisted',
+            task_management: 'hierarchical',
+            integration_level: 'deep'
+          };
+          this.logger.info('🧠 SuperClaude mode enabled via CLI flag');
+        }
+
         return config;
       }
     } catch (error) {
       this.logger.warn(`Could not load configuration file: ${error.message}`);
     }
+
+    // Apply CLI override even if no config file exists
+    if (this.options.forceSuperclaude) {
+      this.superclaudeConfig = {
+        enabled: true,
+        planning_mode: 'intelligent',
+        execution_mode: 'assisted',
+        task_management: 'hierarchical',
+        integration_level: 'deep'
+      };
+      this.logger.info('🧠 SuperClaude mode enabled via CLI flag');
+    }
+
     return null;
   }
 
@@ -505,6 +531,11 @@ class Orchestrator extends EventEmitter {
   }
 
   async executeClaudeCode (prompt, options = {}) {
+    // Check if SuperClaude mode is active and optimize prompt
+    if (this.superclaudeConfig?.enabled && this.superclaudeIntegration?.isEnabled()) {
+      prompt = await this.optimizePromptWithSuperClaude(prompt);
+    }
+
     // Check if rate limiting is enabled
     if (!this.options.enableRetryOnLimits) {
       return await this.executeClaudeCodeSingle(prompt, options);
@@ -733,6 +764,92 @@ class Orchestrator extends EventEmitter {
     }
 
     this.logger.info(`✅ ${limitType.charAt(0).toUpperCase() + limitType.slice(1)} wait completed. Resuming execution...`);
+  }
+
+  async optimizePromptWithSuperClaude (originalPrompt) {
+    this.logger.info('🧠 Optimizing prompt with SuperClaude Framework...');
+
+    // Check if the optimization guide exists
+    const optimizationGuidePath = path.join(this.options.workingDir, 'SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md');
+    const guideExists = await fs.pathExists(optimizationGuidePath);
+
+    if (!guideExists) {
+      this.logger.warn('⚠️  SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md not found, using original prompt');
+      return originalPrompt;
+    }
+
+    // Create the optimization prompt
+    const guide = '@SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md';
+    const optimizationPrompt = `Optimize the following prompt based on ${guide}: ${originalPrompt}`;
+
+    try {
+      // Execute Claude Code with the optimization prompt
+      this.logger.info('📝 Running prompt optimization...');
+      const result = await this.executeClaudeCodeSingle(optimizationPrompt, {
+        timeout: 30000, // 30 second timeout for optimization
+        workingDir: this.options.workingDir
+      });
+
+      // Extract the optimized command from the output
+      const optimizedCommand = this.extractOptimizedCommand(result.stdout);
+
+      if (optimizedCommand && optimizedCommand !== originalPrompt) {
+        this.logger.info(`✅ Prompt optimized to: ${optimizedCommand}`);
+        return optimizedCommand;
+      } else {
+        this.logger.warn('⚠️  No optimization found, using original prompt');
+        return originalPrompt;
+      }
+    } catch (error) {
+      this.logger.error(`❌ Prompt optimization failed: ${error.message}`);
+      this.logger.info('📝 Falling back to original prompt');
+      return originalPrompt;
+    }
+  }
+
+  extractOptimizedCommand (output) {
+    if (!output) return null;
+
+    // Look for SuperClaude command patterns in the output
+    const lines = output.split('\n');
+
+    // Common patterns for optimized commands
+    const commandPatterns = [
+      /^\/\w+\s+.*$/m, // Slash commands starting at line beginning
+      /optimized:\s*(.+)$/im, // "Optimized: /command ..."
+      /optimal.*command:\s*(.+)$/im, // "Optimal SC Command: /command ..."
+      /command:\s*(.+)$/im, // "Command: /command ..."
+      /`([^`]+)`/ // Commands in backticks
+    ];
+
+    // First, try to find patterns in the full output
+    for (const pattern of commandPatterns) {
+      const matches = output.matchAll(new RegExp(pattern, 'gm'));
+      for (const match of matches) {
+        const command = match[1] || match[0];
+        const cleanCommand = command.replace(/`/g, '').trim();
+        // Ensure it's a valid SuperClaude command
+        if (cleanCommand.startsWith('/')) {
+          return cleanCommand;
+        }
+      }
+    }
+
+    // If no pattern match, look for slash commands line by line
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      // Skip lines that are clearly not commands
+      if (trimmedLine.startsWith('#') || trimmedLine.startsWith('//') || trimmedLine.startsWith('*')) {
+        continue;
+      }
+      // Check if line contains a slash command
+      const commandMatch = trimmedLine.match(/\/\w+\s+[^#]*/);
+      if (commandMatch) {
+        return commandMatch[0].trim();
+      }
+    }
+
+    return null;
   }
 
   async sleep (ms) {

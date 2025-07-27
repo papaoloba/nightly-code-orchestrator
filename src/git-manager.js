@@ -259,7 +259,7 @@ node_modules/
         const chunk = commitChunks[i];
         const isProgressCommit = i < totalCommits - 1;
         const commitNumber = i + 1;
-        
+
         // Generate appropriate commit message
         let commitMessage;
         if (chunk.message) {
@@ -268,7 +268,7 @@ node_modules/
         } else {
           // Generate message following new convention
           commitMessage = this.generateCommitMessage(
-            task, 
+            task,
             { ...result, summary: chunk.summary },
             isProgressCommit,
             commitNumber,
@@ -319,10 +319,10 @@ node_modules/
     const type = this.getCommitType(task.type);
     const scope = this.extractScope(task);
     const description = task.title.slice(0, 50);
-    
+
     // Add task ID to subject line
     let subject = `${type}${scope}: ${description} [task:${task.id}]`;
-    
+
     // Add progress indicator for multi-commit tasks
     if (isProgressCommit && commitNumber && totalCommits) {
       subject += ` [${commitNumber}/${totalCommits}]`;
@@ -330,7 +330,7 @@ node_modules/
 
     // For progress commits, keep the message shorter
     if (isProgressCommit) {
-      return subject + '\\n\\n' + (result.summary || 'Work in progress on task implementation.');
+      return `${subject}\\n\\n${result.summary || 'Work in progress on task implementation.'}`;
     }
 
     // Full message for task completion
@@ -361,16 +361,16 @@ node_modules/
     footer.push(`Task-ID: ${task.id}`);
     footer.push(`Task-Title: ${task.title}`);
     footer.push(`Task-Type: ${task.type || 'feature'}`);
-    footer.push(`Task-Status: completed`);
+    footer.push('Task-Status: completed');
     footer.push(`Task-Duration: ${Math.round((result.duration || 0) / 1000)}`);
     footer.push(`Task-Session: ${this.sessionBranch?.sessionId || 'unknown'}`);
     footer.push(`Task-Date: ${new Date().toISOString()}`);
 
     if (body.length > 0) {
-      message += '\\n\\n' + body.join('\\n');
+      message += `\\n\\n${body.join('\\n')}`;
     }
-    
-    message += '\\n\\n' + footer.join('\\n');
+
+    message += `\\n\\n${footer.join('\\n')}`;
 
     return message;
   }
@@ -435,7 +435,6 @@ node_modules/
     }
   }
 
-
   async createSessionPR (sessionResults) {
     if (this.options.dryRun) {
       this.options.logger.info('🔄 Dry run mode - would create session pull request');
@@ -484,9 +483,6 @@ node_modules/
     }
   }
 
-
-
-
   async generateSessionPRBody (sessionResults) {
     const body = [];
 
@@ -525,7 +521,7 @@ node_modules/
     body.push('');
     body.push('To find commits for a specific task, use:');
     body.push('```bash');
-    body.push(`git log --grep="\\[task:" --oneline`);
+    body.push('git log --grep="\\[task:" --oneline');
     body.push('```');
     body.push('');
 

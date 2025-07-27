@@ -4,6 +4,7 @@ const { TaskManager } = require('../src/task-manager');
 const { GitManager } = require('../src/git-manager');
 const { Validator } = require('../src/validator');
 const { Reporter } = require('../src/reporter');
+const { SuperClaudeIntegration } = require('../src/superclaude-integration');
 const fs = require('fs-extra');
 const path = require('path');
 
@@ -12,6 +13,7 @@ jest.mock('../src/task-manager');
 jest.mock('../src/git-manager');
 jest.mock('../src/validator');
 jest.mock('../src/reporter');
+jest.mock('../src/superclaude-integration');
 jest.mock('fs-extra');
 
 describe('Orchestrator', () => {
@@ -20,11 +22,15 @@ describe('Orchestrator', () => {
   let mockGitManager;
   let mockValidator;
   let mockReporter;
+  let mockSuperClaudeIntegration;
   let consoleLogSpy;
 
   beforeEach(() => {
     // Clear all mocks
     jest.clearAllMocks();
+
+    // Don't spy on console.log, let setup.js handle it
+    consoleLogSpy = { mockRestore: jest.fn() };
 
     // Setup mock implementations
     mockTaskManager = {
@@ -46,12 +52,18 @@ describe('Orchestrator', () => {
     mockReporter = {
       generateSessionReport: jest.fn()
     };
+    mockSuperClaudeIntegration = {
+      initialize: jest.fn(),
+      isEnabled: jest.fn().mockReturnValue(false),
+      planTask: jest.fn()
+    };
 
     // Mock constructors
     TaskManager.mockImplementation(() => mockTaskManager);
     GitManager.mockImplementation(() => mockGitManager);
     Validator.mockImplementation(() => mockValidator);
     Reporter.mockImplementation(() => mockReporter);
+    SuperClaudeIntegration.mockImplementation(() => mockSuperClaudeIntegration);
 
     // Mock fs operations
     fs.ensureDirSync = jest.fn();
@@ -405,6 +417,103 @@ describe('Orchestrator', () => {
       expect(report.success).toBe(false);
       expect(report.errors).toHaveLength(1);
       expect(report.errors[0]).toBe('Task failed');
+    });
+  });
+
+  describe('SuperClaude Prompt Optimization', () => {
+    it('should optimize prompts when SuperClaude is enabled', async () => {
+      // Enable SuperClaude
+      orchestrator.superclaudeConfig = { enabled: true };
+      orchestrator.superclaudeIntegration = mockSuperClaudeIntegration;
+      mockSuperClaudeIntegration.isEnabled.mockReturnValue(true);
+
+      // Mock the optimization guide exists
+      fs.pathExists.mockResolvedValue(true);
+
+      // Mock executeClaudeCodeSingle to return optimized command
+      orchestrator.executeClaudeCodeSingle = jest.fn().mockResolvedValue({
+        stdout: '/improve @src/ --focus quality --validate',
+        stderr: '',
+        code: 0
+      });
+
+      const originalPrompt = 'Make the code better';
+      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
+
+      expect(result).toBe('/improve @src/ --focus quality --validate');
+      expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledWith(
+        expect.stringContaining('Optimize the following prompt based on @SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md'),
+        expect.any(Object)
+      );
+    });
+
+    it('should return original prompt when optimization guide is missing', async () => {
+      orchestrator.superclaudeConfig = { enabled: true };
+      orchestrator.superclaudeIntegration = mockSuperClaudeIntegration;
+      mockSuperClaudeIntegration.isEnabled.mockReturnValue(true);
+
+      // Mock the optimization guide doesn't exist
+      fs.pathExists.mockResolvedValue(false);
+
+      const originalPrompt = 'Make the code better';
+      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
+
+      expect(result).toBe(originalPrompt);
+    });
+
+    it('should return original prompt when optimization fails', async () => {
+      orchestrator.superclaudeConfig = { enabled: true };
+      orchestrator.superclaudeIntegration = mockSuperClaudeIntegration;
+      mockSuperClaudeIntegration.isEnabled.mockReturnValue(true);
+
+      // Mock the optimization guide exists
+      fs.pathExists.mockResolvedValue(true);
+
+      // Mock executeClaudeCodeSingle to throw error
+      orchestrator.executeClaudeCodeSingle = jest.fn().mockRejectedValue(new Error('Optimization failed'));
+
+      const originalPrompt = 'Make the code better';
+      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
+
+      expect(result).toBe(originalPrompt);
+    });
+
+    it('should extract optimized commands correctly', () => {
+      // Test various output formats
+      const testCases = [
+        {
+          output: '/analyze @src/ --think --seq',
+          expected: '/analyze @src/ --think --seq'
+        },
+        {
+          output: 'Optimized: /build "component" --magic',
+          expected: '/build "component" --magic'
+        },
+        {
+          output: 'The optimal command is `/improve @. --validate`',
+          expected: '/improve @. --validate'
+        },
+        {
+          output: 'Command: /test --coverage',
+          expected: '/test --coverage'
+        }
+      ];
+
+      testCases.forEach(({ output, expected }) => {
+        const result = orchestrator.extractOptimizedCommand(output);
+        expect(result).toBe(expected);
+      });
+    });
+
+    it('should not optimize prompts when SuperClaude is disabled', async () => {
+      orchestrator.superclaudeConfig = { enabled: false };
+      orchestrator.executeClaudeCodeSingle = jest.fn();
+
+      const spy = jest.spyOn(orchestrator, 'optimizePromptWithSuperClaude');
+
+      await orchestrator.executeClaudeCode('test prompt');
+
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 });

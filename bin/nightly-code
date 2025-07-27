@@ -110,6 +110,7 @@ program
   .option('--max-duration <minutes>', 'Maximum session duration in minutes', '480')
   .option('--dry-run', 'Validate configuration without executing')
   .option('--resume <checkpoint>', 'Resume from checkpoint')
+  .option('--superclaude', 'Enable SuperClaude prompt optimization (overrides config)')
   .action(async (options) => {
     try {
       console.log(chalk.blue('🎯 Starting coding session...'));
@@ -119,7 +120,8 @@ program
         tasksPath: options.tasks,
         maxDuration: parseInt(options.maxDuration) * 60, // Convert to seconds
         dryRun: options.dryRun,
-        resumeCheckpoint: options.resume
+        resumeCheckpoint: options.resume,
+        forceSuperclaude: options.superclaude // CLI flag overrides config
       });
 
       const result = await orchestrator.run();
