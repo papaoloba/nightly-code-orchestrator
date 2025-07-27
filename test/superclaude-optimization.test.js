@@ -21,13 +21,10 @@ describe('SuperClaude Prompt Optimization', () => {
   });
 
   describe('optimizePromptWithSuperClaude', () => {
-    it('should optimize prompts when SuperClaude is enabled and guide exists', async () => {
+    it('should optimize prompts when SuperClaude is enabled', async () => {
       // Enable SuperClaude
       orchestrator.superclaudeConfig = { enabled: true };
       orchestrator.superclaudeIntegration = { isEnabled: () => true };
-
-      // Mock the optimization guide exists
-      fs.pathExists.mockResolvedValue(true);
 
       // Mock executeClaudeCodeSingle to return optimized command
       orchestrator.executeClaudeCodeSingle = jest.fn().mockResolvedValue({
@@ -41,7 +38,7 @@ describe('SuperClaude Prompt Optimization', () => {
 
       expect(result).toBe('/improve @src/ --focus quality --validate');
       expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledWith(
-        'Optimize the following prompt based on @SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md: Make the code better',
+        expect.stringContaining('Transform this prompt:'),
         expect.objectContaining({
           timeout: 30000,
           workingDir: expect.any(String)
@@ -49,25 +46,9 @@ describe('SuperClaude Prompt Optimization', () => {
       );
     });
 
-    it('should return original prompt when optimization guide is missing', async () => {
-      orchestrator.superclaudeConfig = { enabled: true };
-      orchestrator.superclaudeIntegration = { isEnabled: () => true };
-
-      // Mock the optimization guide doesn't exist
-      fs.pathExists.mockResolvedValue(false);
-
-      const originalPrompt = 'Make the code better';
-      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
-
-      expect(result).toBe(originalPrompt);
-    });
-
     it('should return original prompt when optimization fails', async () => {
       orchestrator.superclaudeConfig = { enabled: true };
       orchestrator.superclaudeIntegration = { isEnabled: () => true };
-
-      // Mock the optimization guide exists
-      fs.pathExists.mockResolvedValue(true);
 
       // Mock executeClaudeCodeSingle to throw error
       orchestrator.executeClaudeCodeSingle = jest.fn().mockRejectedValue(new Error('Optimization failed'));

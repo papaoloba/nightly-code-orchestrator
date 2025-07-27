@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2025-01-27
+
+### Fixed
+- SuperClaude prompt optimization no longer requires external SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md file
+- Embedded the complete optimization guide directly in the code for better portability
+- The full SuperClaude Prompt Optimization Guide is now included in the codebase
+
+## [1.1.0] - 2025-01-27
+
+### Added
+- SuperClaude Framework integration for automatic prompt optimization
+- `--superclaude` CLI flag for enabling optimization mode
+- Automatic transformation of natural language prompts to optimal SuperClaude commands
+- Comprehensive documentation for SuperClaude integration
+
+## [1.0.0] - 2025-01-25
+
 ### Changed
 - **BREAKING**: Removed git tag system for task tracking in favor of commit message convention
 - Task completion now tracked exclusively via `[task:<id>]` in commit messages

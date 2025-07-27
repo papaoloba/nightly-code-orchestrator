@@ -50,8 +50,10 @@ const orchestrator = new Orchestrator({
 
 ## Prerequisites
 
-1. **SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md**: This file must exist in your project root for optimization to work
-2. **Claude Code**: Must have Claude Code CLI installed and accessible
+1. **Claude Code**: Must have Claude Code CLI installed and accessible
+2. **SuperClaude enabled**: Must be enabled via configuration or CLI flag
+
+Note: The optimization guide is now embedded in the code, so no external file is required.
 
 ## Examples
 
@@ -137,9 +139,9 @@ The optimization follows these patterns:
 
 ### Optimization Not Working
 
-1. **Check Guide File**: Ensure `SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md` exists in project root
-2. **Verify SuperClaude**: Check that SuperClaude is enabled in config or via CLI flag
-3. **Check Logs**: Look for "🧠 Optimizing prompt with SuperClaude Framework..." in output
+1. **Verify SuperClaude**: Check that SuperClaude is enabled in config or via CLI flag
+2. **Check Logs**: Look for "🧠 Optimizing prompt with SuperClaude Framework..." in output
+3. **Verify Claude Code**: Ensure Claude Code CLI is installed and accessible
 
 ### Fallback Behavior
 
@@ -153,6 +155,7 @@ If optimization fails:
 - Optimization adds ~1-3 seconds to execution time
 - Optimization timeout is set to 30 seconds
 - Failed optimizations don't block execution
+- The complete optimization guide is embedded in the code for maximum portability
 
 ## Configuration Options
 

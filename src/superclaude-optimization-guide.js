@@ -1,6 +1,8 @@
-# SuperClaude Prompt Optimization Guide for Claude Code
+// SuperClaude Prompt Optimization Guide embedded as a constant
+const SUPERCLAUDE_OPTIMIZATION_GUIDE = `# SuperClaude Prompt Optimization Guide for Claude Code
 
-A structured guide for transforming unstructured requests into optimal SuperClaude slash commands that adhere to framework principles, syntax rules, and command specifications.
+A structured guide for transforming unstructured requests into optimal SuperClaude slash commands
+that adhere to framework principles, syntax rules, and command specifications.
 
 ## Core Principle
 
@@ -12,16 +14,17 @@ A structured guide for transforming unstructured requests into optimal SuperClau
 
 | User Intent | Keywords | SC Command | Auto-Activations |
 |------------|----------|------------|------------------|
-| Create/Build | "create", "build", "make", "implement" | `/build` or `/implement` | Frontend/Backend persona, Magic/Context7 |
-| Analyze/Investigate | "analyze", "check", "review", "investigate" | `/analyze` | Analyzer persona, Sequential |
-| Fix/Debug | "fix", "debug", "troubleshoot", "solve" | `/troubleshoot` | Analyzer persona, Sequential |
-| Improve/Optimize | "improve", "optimize", "enhance", "refactor" | `/improve` | Refactorer/Performance persona |
-| Document | "document", "write docs", "explain" | `/document` | Scribe persona, Context7 |
-| Test | "test", "validate", "verify" | `/test` | QA persona, Playwright |
+| Create/Build | "create", "build", "make", "implement" | \`/build\` or \`/implement\` |
+Frontend/Backend persona, Magic/Context7 |
+| Analyze/Investigate | "analyze", "check", "review", "investigate" | \`/analyze\` | Analyzer persona, Sequential |
+| Fix/Debug | "fix", "debug", "troubleshoot", "solve" | \`/troubleshoot\` | Analyzer persona, Sequential |
+| Improve/Optimize | "improve", "optimize", "enhance", "refactor" | \`/improve\` | Refactorer/Performance persona |
+| Document | "document", "write docs", "explain" | \`/document\` | Scribe persona, Context7 |
+| Test | "test", "validate", "verify" | \`/test\` | QA persona, Playwright |
 
 ### 2. Assess Complexity → Add Flags
 
-```yaml
+\`\`\`yaml
 Simple (1-3 steps):
   - No thinking flags needed
   - Basic command sufficient
@@ -34,11 +37,11 @@ Complex (10+ steps):
   - Add: --think-hard or --ultrathink
   - Enable: --wave-mode auto
   - Consider: --delegate auto
-```
+\`\`\`
 
 ### 3. Determine Scope → Configure Execution
 
-```yaml
+\`\`\`yaml
 File-level:
   - Target: @file.ext
   - No delegation needed
@@ -51,13 +54,13 @@ System-level:
   - Target: @.
   - Enable: --delegate auto
   - Consider: --wave-mode
-```
+\`\`\`
 
 ## Syntax Rules Compliance
 
 ### Proper Argument Structure
 
-```bash
+\`\`\`bash
 # CORRECT: Command + target + flags
 /command [target] [--flags]
 
@@ -65,11 +68,11 @@ System-level:
 /analyze @src/ --think --seq
 /build "component name" --magic --c7
 /improve @. --wave-mode auto --validate
-```
+\`\`\`
 
 ### Path Specification Rules
 
-```bash
+\`\`\`bash
 # Always use absolute paths or @ notation
 @.              # Current directory
 @src/           # Specific directory
@@ -78,47 +81,47 @@ System-level:
 # NEVER use relative paths
 # Wrong: ../src/file.ts
 # Right: @src/file.ts
-```
+\`\`\`
 
 ### Flag Precedence (RULES.md compliance)
 
-1. Safety flags override optimization: `--safe-mode > --uc`
+1. Safety flags override optimization: \`--safe-mode > --uc\`
 2. Explicit flags override auto-activation
-3. Thinking depth: `--ultrathink > --think-hard > --think`
-4. Wave mode: `off > force > auto`
+3. Thinking depth: \`--ultrathink > --think-hard > --think\`
+4. Wave mode: \`off > force > auto\`
 
 ## Framework Principles Application
 
 ### Evidence > Assumptions
 
-```bash
+\`\`\`bash
 # Bad: Vague improvement request
 /improve "make better"
 
 # Good: Evidence-based improvement
 /improve @src/ --focus performance --validate --think
-```
+\`\`\`
 
 ### Code > Documentation
 
-```bash
+\`\`\`bash
 # Prioritize implementation
 /implement "auth system" --validate  # First
 /document @auth/ --persona-scribe=en  # Second
-```
+\`\`\`
 
 ### Efficiency > Verbosity
 
-```bash
+\`\`\`bash
 # Enable compression for large operations
 /analyze @large-project/ --uc --delegate auto
-```
+\`\`\`
 
 ## Optimization Patterns
 
 ### Pattern 1: Frontend Development
 
-```bash
+\`\`\`bash
 # Unstructured: "Create a responsive dashboard with charts"
 # Optimized:
 /build "responsive dashboard" --magic --c7 --focus accessibility
@@ -128,11 +131,11 @@ System-level:
 # - --magic for UI components
 # - --c7 for framework patterns
 # - --focus accessibility for best practices
-```
+\`\`\`
 
 ### Pattern 2: Backend API
 
-```bash
+\`\`\`bash
 # Unstructured: "Build a REST API with authentication"
 # Optimized:
 /implement "REST API with auth" --think --seq --validate
@@ -142,11 +145,11 @@ System-level:
 # - --think for moderate complexity
 # - --seq for systematic approach
 # - --validate for security
-```
+\`\`\`
 
 ### Pattern 3: System Analysis
 
-```bash
+\`\`\`bash
 # Unstructured: "Find performance bottlenecks in my application"
 # Optimized:
 /analyze @. --focus performance --think-hard --persona-performance
@@ -156,11 +159,11 @@ System-level:
 # - --focus performance for targeted analysis
 # - --think-hard for deep analysis
 # - Auto-activates performance persona
-```
+\`\`\`
 
 ### Pattern 4: Code Quality
 
-```bash
+\`\`\`bash
 # Unstructured: "Clean up and improve code quality"
 # Optimized:
 /improve @src/ --focus quality --loop --validate
@@ -170,13 +173,13 @@ System-level:
 # - --focus quality for targeted improvement
 # - --loop for iterative refinement
 # - --validate for quality gates
-```
+\`\`\`
 
 ## Wave Mode Optimization
 
 ### Auto-Activation Criteria (ORCHESTRATOR.md)
 
-```yaml
+\`\`\`yaml
 wave_triggers:
   - complexity >= 0.7
   - files > 20
@@ -184,11 +187,11 @@ wave_triggers:
 
 # Example triggering wave mode:
 /improve @legacy-system/ --wave-mode auto --wave-strategy enterprise
-```
+\`\`\`
 
 ### Wave Strategy Selection
 
-```bash
+\`\`\`bash
 # Progressive (iterative enhancement)
 /improve @. --wave-mode auto --wave-strategy progressive
 
@@ -197,13 +200,13 @@ wave_triggers:
 
 # Enterprise (large-scale)
 /improve @monorepo/ --wave-mode auto --wave-strategy enterprise
-```
+\`\`\`
 
 ## MCP Server Optimization
 
 ### Intelligent Server Selection
 
-```bash
+\`\`\`bash
 # Documentation lookup
 /explain "React hooks" --c7  # Auto-activates Context7
 
@@ -215,11 +218,11 @@ wave_triggers:
 
 # E2E testing
 /test e2e --play  # Playwright for browser automation
-```
+\`\`\`
 
 ### Multi-Server Coordination
 
-```bash
+\`\`\`bash
 # Comprehensive analysis
 /analyze @. --all-mcp --ultrathink
 
@@ -228,13 +231,13 @@ wave_triggers:
 
 # No MCP (faster execution)
 /improve @utils/ --no-mcp --uc
-```
+\`\`\`
 
 ## Persona Activation Rules
 
 ### Auto-Activation Examples
 
-```bash
+\`\`\`bash
 # Frontend work → frontend persona
 /build "nav component"  # Auto: --persona-frontend
 
@@ -243,21 +246,21 @@ wave_triggers:
 
 # Documentation → scribe persona
 /document @api/  # Auto: --persona-scribe=en
-```
+\`\`\`
 
 ### Manual Override
 
-```bash
+\`\`\`bash
 # Force specific persona
 /improve @. --persona-architect --ultrathink
 
 # Multiple persona consultation
 /design "microservices" --persona-architect --persona-backend
-```
+\`\`\`
 
 ## Command Construction Checklist
 
-```yaml
+\`\`\`yaml
 Step 1 - Select Base Command:
   ✓ Match user intent to command category
   ✓ Choose most specific command
@@ -284,11 +287,11 @@ Step 5 - Enable Intelligence:
   ✓ Let MCP servers auto-enable
   ✓ Trust wave detection
   ✓ Allow flag precedence
-```
+\`\`\`
 
 ## Quick Transformation Examples
 
-```bash
+\`\`\`bash
 # "Fix the TypeScript errors"
 /troubleshoot @. --focus typescript --delegate auto
 
@@ -312,11 +315,11 @@ Step 5 - Enable Intelligence:
 
 # "Modernize legacy code"
 /improve @legacy/ --wave-mode enterprise --delegate auto
-```
+\`\`\`
 
 ## Common Mistakes to Avoid
 
-```bash
+\`\`\`bash
 # ❌ Wrong: Vague targets
 /improve "everything"
 
@@ -340,19 +343,28 @@ Step 5 - Enable Intelligence:
 
 # ✅ Right: Appropriate complexity
 /analyze --think-hard --seq
-```
+\`\`\`
 
 ## Optimization Formula
 
-```
+\`\`\`
 Optimal SC Command = 
   Base Command (intent match) +
   Target (@ notation) +
   Complexity Flags (if needed) +
   Optimization Flags (scope-based) +
   Validation (if critical)
-```
+\`\`\`
 
 ## Summary
 
-The key to optimal SuperClaude prompts is understanding that the framework's intelligence handles complexity for you. Start with the right command, add appropriate targets, let auto-activation work, and only add flags when truly needed. The framework will optimize execution through personas, MCP servers, wave orchestration, and delegation as appropriate.
+The key to optimal SuperClaude prompts is understanding that the framework's intelligence handles 
+complexity for you. Start with the right command, add appropriate targets, let auto-activation work, 
+and only add flags when truly needed. The framework will optimize execution through personas, 
+MCP servers, wave orchestration, and delegation as appropriate.
+
+Transform this prompt: "{PROMPT}"
+
+Return ONLY the optimized command starting with /, nothing else.`;
+
+module.exports = { SUPERCLAUDE_OPTIMIZATION_GUIDE };

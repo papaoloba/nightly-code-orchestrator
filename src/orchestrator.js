@@ -11,6 +11,7 @@ const { GitManager } = require('./git-manager');
 const { Validator } = require('./validator');
 const { Reporter } = require('./reporter');
 const { SuperClaudeIntegration } = require('./superclaude-integration');
+const { SUPERCLAUDE_OPTIMIZATION_GUIDE } = require('./superclaude-optimization-guide');
 
 class Orchestrator extends EventEmitter {
   constructor (options = {}) {
@@ -769,18 +770,8 @@ class Orchestrator extends EventEmitter {
   async optimizePromptWithSuperClaude (originalPrompt) {
     this.logger.info('🧠 Optimizing prompt with SuperClaude Framework...');
 
-    // Check if the optimization guide exists
-    const optimizationGuidePath = path.join(this.options.workingDir, 'SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md');
-    const guideExists = await fs.pathExists(optimizationGuidePath);
-
-    if (!guideExists) {
-      this.logger.warn('⚠️  SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md not found, using original prompt');
-      return originalPrompt;
-    }
-
-    // Create the optimization prompt
-    const guide = '@SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md';
-    const optimizationPrompt = `Optimize the following prompt based on ${guide}: ${originalPrompt}`;
+    // Use the complete optimization guide with the prompt
+    const optimizationPrompt = SUPERCLAUDE_OPTIMIZATION_GUIDE.replace('{PROMPT}', originalPrompt);
 
     try {
       // Execute Claude Code with the optimization prompt
