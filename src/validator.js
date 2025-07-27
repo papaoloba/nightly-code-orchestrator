@@ -4,6 +4,7 @@ const YAML = require('yaml');
 const Joi = require('joi');
 const { spawn } = require('cross-spawn');
 const { TIME, STORAGE, LIMITS, MEMORY } = require('./constants');
+const PrettyLogger = require('./pretty-logger');
 
 class Validator {
   constructor (options = {}) {
@@ -16,6 +17,7 @@ class Validator {
 
     this.configSchema = this.createConfigSchema();
     this.projectValidators = this.createProjectValidators();
+    this.prettyLogger = new PrettyLogger();
   }
 
   createConfigSchema () {
@@ -121,7 +123,11 @@ class Validator {
   }
 
   async validateAll () {
-    this.options.logger.info('Starting comprehensive validation');
+    this.prettyLogger.banner('VALIDATION', 'Small');
+    this.prettyLogger.divider('═', 60, 'cyan');
+    this.prettyLogger.info('🔍 Starting comprehensive validation...');
+    
+    const validationSpinner = this.prettyLogger.spinner('Running validation checks');
 
     const results = {
       valid: true,
@@ -137,6 +143,9 @@ class Validator {
       if (!configValidation.valid) {
         results.valid = false;
         results.errors.push(...configValidation.errors);
+        this.prettyLogger.error('❌ Configuration validation failed');
+      } else {
+        this.prettyLogger.success('✓ Configuration validation passed');
       }
       results.warnings.push(...configValidation.warnings);
 
@@ -146,6 +155,9 @@ class Validator {
       if (!tasksValidation.valid) {
         results.valid = false;
         results.errors.push(...tasksValidation.errors);
+        this.prettyLogger.error('❌ Task validation failed');
+      } else {
+        this.prettyLogger.success('✓ Task validation passed');
       }
       results.warnings.push(...tasksValidation.warnings);
 
@@ -155,6 +167,9 @@ class Validator {
       if (!projectValidation.valid) {
         results.valid = false;
         results.errors.push(...projectValidation.errors);
+        this.prettyLogger.error('❌ Project structure validation failed');
+      } else {
+        this.prettyLogger.success('✓ Project structure validation passed');
       }
       results.warnings.push(...projectValidation.warnings);
 
@@ -164,18 +179,23 @@ class Validator {
       if (!envValidation.valid) {
         results.valid = false;
         results.errors.push(...envValidation.errors);
+        this.prettyLogger.error('❌ Environment validation failed');
+      } else {
+        this.prettyLogger.success('✓ Environment validation passed');
       }
       results.warnings.push(...envValidation.warnings);
 
-      this.options.logger.info('Validation completed', {
-        valid: results.valid,
-        errors: results.errors.length,
-        warnings: results.warnings.length
-      });
+      validationSpinner.stop();
+      
+      // Display validation summary
+      this.prettyLogger.divider('─', 60, 'gray');
+      this.displayValidationSummary(results);
+      this.prettyLogger.divider('═', 60, 'cyan');
 
       return results;
     } catch (error) {
-      this.options.logger.error('Validation failed with exception', { error: error.message });
+      validationSpinner.fail('Validation failed with exception');
+      this.prettyLogger.error(`💥 ${error.message}`);
 
       results.valid = false;
       results.errors.push({
@@ -189,7 +209,7 @@ class Validator {
   }
 
   async validateConfiguration () {
-    this.options.logger.debug('Validating configuration');
+    this.prettyLogger.pending('📋 Validating configuration file...');
 
     const result = {
       valid: true,
@@ -299,12 +319,13 @@ class Validator {
   }
 
   async validateTasks () {
-    this.options.logger.debug('Validating tasks');
+    this.prettyLogger.pending('📝 Validating task definitions...');
 
     const result = {
       valid: true,
       errors: [],
-      warnings: []
+      warnings: [],
+      taskValidations: []
     };
 
     try {
@@ -353,7 +374,11 @@ class Validator {
 
       // Validate each task
       const taskIds = new Set();
-      const totalEstimatedTime = tasksData.tasks.reduce((sum, task, index) => {
+      let totalEstimatedTime = 0;
+      
+      // Process tasks sequentially to handle async validation
+      for (let index = 0; index < tasksData.tasks.length; index++) {
+        const task = tasksData.tasks[index];
         // Check for required fields
         if (!task.id) {
           result.errors.push({
@@ -439,8 +464,43 @@ class Validator {
           }
         }
 
-        return sum + duration;
-      }, 0);
+        // Validate custom validation script exists
+        if (task.custom_validation?.script) {
+          const scriptPath = path.resolve(this.options.workingDir, task.custom_validation.script);
+          const scriptExists = await fs.pathExists(scriptPath);
+          
+          if (!scriptExists) {
+            result.errors.push({
+              type: 'missing_custom_validation_script',
+              message: `Task ${task.id || index} references non-existent custom validation script: ${task.custom_validation.script}`,
+              path: `tasks[${index}].custom_validation.script`
+            });
+            result.valid = false;
+          } else {
+            // Check if script is executable
+            try {
+              await fs.access(scriptPath, fs.constants.X_OK);
+            } catch (err) {
+              result.warnings.push({
+                type: 'custom_validation_script_not_executable',
+                message: `Task ${task.id || index} custom validation script may not be executable: ${task.custom_validation.script}`,
+                path: `tasks[${index}].custom_validation.script`
+              });
+            }
+          }
+          
+          // Store task validation info for summary
+          result.taskValidations.push({
+            taskId: task.id,
+            title: task.title,
+            hasCustomValidation: true,
+            scriptPath: task.custom_validation.script,
+            scriptExists
+          });
+        }
+
+        totalEstimatedTime += duration;
+      }
 
       // Check total estimated time
       if (totalEstimatedTime > 480) { // More than 8 hours
@@ -519,7 +579,7 @@ class Validator {
   }
 
   async validateProject () {
-    this.options.logger.debug('Validating project structure');
+    this.prettyLogger.pending('🌳 Validating project structure...');
 
     const result = {
       valid: true,
@@ -863,7 +923,7 @@ class Validator {
   }
 
   async validateEnvironment () {
-    this.options.logger.debug('Validating environment');
+    this.prettyLogger.pending('🔧 Validating environment and dependencies...');
 
     const result = {
       valid: true,
@@ -1047,8 +1107,8 @@ Add usage instructions here.
   }
 
   isValidFilePattern (pattern) {
-    // Basic validation for file patterns
-    const invalidChars = /[<>:"|?*]/;
+    // Basic validation for file patterns - allow glob patterns with * and ?
+    const invalidChars = /[<>:"|]/;
     if (invalidChars.test(pattern)) {
       return false;
     }
@@ -1159,6 +1219,107 @@ Add usage instructions here.
       } catch (error2) {
         return { total: 8000000000, available: 4000000000 }; // Default assumption
       }
+    }
+  }
+
+  displayValidationSummary (results) {
+    const items = [];
+    
+    // Configuration validation
+    const configStatus = results.validations.configuration;
+    if (configStatus) {
+      items.push({
+        label: 'Configuration',
+        value: configStatus.valid ? 'Valid' : `${configStatus.errors.length} errors`,
+        status: configStatus.valid ? 'success' : 'error'
+      });
+    }
+    
+    // Tasks validation
+    const tasksStatus = results.validations.tasks;
+    if (tasksStatus) {
+      const taskSummary = tasksStatus.valid 
+        ? `Valid (${tasksStatus.taskValidations?.filter(t => t.hasCustomValidation).length || 0} with custom validation)`
+        : `${tasksStatus.errors.length} errors`;
+      items.push({
+        label: 'Task Definitions',
+        value: taskSummary,
+        status: tasksStatus.valid ? 'success' : 'error'
+      });
+      
+      // Show custom validation script status
+      const customValidationTasks = tasksStatus.taskValidations?.filter(t => t.hasCustomValidation) || [];
+      if (customValidationTasks.length > 0) {
+        const missingScripts = customValidationTasks.filter(t => !t.scriptExists);
+        if (missingScripts.length > 0) {
+          items.push({
+            label: 'Custom Validation Scripts',
+            value: `${missingScripts.length} missing scripts`,
+            status: 'error'
+          });
+        }
+      }
+    }
+    
+    // Project validation
+    const projectStatus = results.validations.project;
+    if (projectStatus) {
+      items.push({
+        label: 'Project Structure',
+        value: projectStatus.valid ? 'Valid' : `${projectStatus.errors.length} errors`,
+        status: projectStatus.valid ? 'success' : 'error'
+      });
+    }
+    
+    // Environment validation
+    const envStatus = results.validations.environment;
+    if (envStatus) {
+      items.push({
+        label: 'Environment',
+        value: envStatus.valid ? 'Valid' : `${envStatus.errors.length} errors`,
+        status: envStatus.valid ? 'success' : 'error'
+      });
+    }
+    
+    // Overall status
+    items.push({
+      label: 'Overall Status',
+      value: results.valid ? 'All checks passed' : 'Validation failed',
+      status: results.valid ? 'success' : 'error'
+    });
+    
+    if (results.warnings.length > 0) {
+      items.push({
+        label: 'Warnings',
+        value: `${results.warnings.length} warning${results.warnings.length > 1 ? 's' : ''}`,
+        status: 'warning'
+      });
+    }
+    
+    this.prettyLogger.statusDashboard('Validation Summary', items);
+    
+    // Display detailed errors if any
+    if (results.errors.length > 0) {
+      this.prettyLogger.divider('─', 60, 'gray');
+      this.prettyLogger.error('🚨 Validation Errors:');
+      results.errors.forEach((error, index) => {
+        this.prettyLogger.error(`  ${index + 1}. ${error.message}`);
+        if (error.path) {
+          this.prettyLogger.log(`     Path: ${error.path}`);
+        }
+      });
+    }
+    
+    // Display warnings if any
+    if (results.warnings.length > 0) {
+      this.prettyLogger.divider('─', 60, 'gray');
+      this.prettyLogger.warning('⚠️  Warnings:');
+      results.warnings.forEach((warning, index) => {
+        this.prettyLogger.warning(`  ${index + 1}. ${warning.message}`);
+        if (warning.path) {
+          this.prettyLogger.log(`     Path: ${warning.path}`);
+        }
+      });
     }
   }
 

@@ -243,7 +243,7 @@ class TaskManager {
     if (task.custom_validation?.script) {
       const scriptPath = path.resolve(this.options.workingDir, task.custom_validation.script);
       if (!await fs.pathExists(scriptPath)) {
-        this.options.logger.warn(`Custom validation script not found: ${scriptPath}`, { taskId: task.id });
+        throw new Error(`Custom validation script not found: ${scriptPath}`);
       }
     }
 
@@ -257,8 +257,8 @@ class TaskManager {
   }
 
   isValidFilePattern (pattern) {
-    // Basic validation for file patterns
-    const invalidChars = /[<>:"|?*]/;
+    // Basic validation for file patterns - allow glob patterns with * and ?
+    const invalidChars = /[<>:"|]/;
     if (invalidChars.test(pattern)) {
       return false;
     }
