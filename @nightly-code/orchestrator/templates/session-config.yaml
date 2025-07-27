@@ -115,8 +115,8 @@ rate_limiting:
   # Base delay in milliseconds before first retry (1 minute)
   base_delay: 60000
   
-  # Maximum delay for usage limit retries (1 hour)
-  max_delay: 3600000
+  # Maximum delay for usage limit retries (5 hours)
+  max_delay: 18000000
   
   # Use exponential backoff for retry delays
   exponential_backoff: true

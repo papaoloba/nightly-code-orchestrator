@@ -159,7 +159,7 @@ class Orchestrator extends EventEmitter {
           this.options.enableRetryOnLimits = config.rate_limiting.enabled !== false;
           this.options.usageLimitRetry = config.rate_limiting.usage_limit_retry !== false;
           this.options.rateLimitRetry = config.rate_limiting.rate_limit_retry !== false;
-          this.options.maxDelay = config.rate_limiting.max_delay || 3600000;
+          this.options.maxDelay = config.rate_limiting.max_delay || 18000000;
           this.options.exponentialBackoff = config.rate_limiting.exponential_backoff !== false;
           this.options.jitter = config.rate_limiting.jitter !== false;
         }
@@ -703,7 +703,7 @@ class Orchestrator extends EventEmitter {
     }
 
     // Cap the maximum delay
-    const maxDelay = this.options.maxDelay || (errorType === 'USAGE_LIMIT' ? 3600000 : 900000);
+    const maxDelay = this.options.maxDelay || (errorType === 'USAGE_LIMIT' ? 18000000 : 900000);
     return Math.min(delay, maxDelay);
   }
 

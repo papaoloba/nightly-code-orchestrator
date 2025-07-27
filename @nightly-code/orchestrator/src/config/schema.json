@@ -333,9 +333,9 @@
         "max_delay": {
           "type": "integer",
           "minimum": 60000,
-          "maximum": 7200000,
-          "default": 3600000,
-          "description": "Maximum delay in milliseconds for usage limit retries (default: 1 hour)"
+          "maximum": 18000000,
+          "default": 18000000,
+          "description": "Maximum delay in milliseconds for usage limit retries (default: 5 hours)"
         },
         "exponential_backoff": {
           "type": "boolean",

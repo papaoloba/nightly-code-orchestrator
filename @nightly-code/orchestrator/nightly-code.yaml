@@ -33,7 +33,7 @@ rate_limiting:
   enabled: true
   max_retries: 5
   base_delay: 60000
-  max_delay: 3600000
+  max_delay: 18000000
   exponential_backoff: true
   jitter: true
   usage_limit_retry: true
