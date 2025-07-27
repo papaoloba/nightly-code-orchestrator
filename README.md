@@ -43,6 +43,8 @@ npm install --save-dev @papaoloba/nightly-code-orchestrator
 
 ### Initialize Your Project
 
+#### If installed globally:
+
 ```bash
 # Navigate to your project directory
 cd your-project
@@ -62,6 +64,42 @@ nightly-code run --dry-run
 # Schedule automated sessions
 nightly-code schedule
 ```
+
+#### If installed locally as a dev dependency:
+
+```bash
+# Navigate to your project directory
+cd your-project
+
+# Initialize configuration using npx
+npx nightly-code init
+
+# Edit the generated configuration files
+code nightly-code.yaml nightly-tasks.yaml
+
+# Validate your setup
+npx nightly-code validate
+
+# Test with a dry run
+npx nightly-code run --dry-run
+
+# Schedule automated sessions
+npx nightly-code schedule
+```
+
+**Note:** When installed locally, you can either:
+- Use `npx nightly-code` to run commands
+- Add scripts to your `package.json`:
+  ```json
+  {
+    "scripts": {
+      "nightly:init": "nightly-code init",
+      "nightly:run": "nightly-code run",
+      "nightly:validate": "nightly-code validate"
+    }
+  }
+  ```
+  Then run: `npm run nightly:init`
 
 ## Configuration
 
@@ -171,8 +209,13 @@ tasks:
 Initialize configuration in the current repository.
 
 ```bash
+# If installed globally
 nightly-code init
 nightly-code init --force --template python
+
+# If installed locally
+npx nightly-code init
+npx nightly-code init --force --template python
 ```
 
 **Options:**
@@ -184,9 +227,15 @@ nightly-code init --force --template python
 Execute a coding session manually.
 
 ```bash
+# If installed globally
 nightly-code run
 nightly-code run --max-duration 240 --dry-run
 nightly-code run --resume checkpoint-123
+
+# If installed locally
+npx nightly-code run
+npx nightly-code run --max-duration 240 --dry-run
+npx nightly-code run --resume checkpoint-123
 ```
 
 **Options:**
@@ -201,8 +250,13 @@ nightly-code run --resume checkpoint-123
 Set up automated scheduling.
 
 ```bash
+# If installed globally
 nightly-code schedule
 nightly-code schedule --cron "0 22 * * *" --timezone "America/New_York"
+
+# If installed locally
+npx nightly-code schedule
+npx nightly-code schedule --cron "0 22 * * *" --timezone "America/New_York"
 ```
 
 **Options:**
@@ -215,8 +269,13 @@ nightly-code schedule --cron "0 22 * * *" --timezone "America/New_York"
 Check the last session results.
 
 ```bash
+# If installed globally
 nightly-code status
 nightly-code status --verbose --json
+
+# If installed locally
+npx nightly-code status
+npx nightly-code status --verbose --json
 ```
 
 **Options:**
@@ -228,8 +287,13 @@ nightly-code status --verbose --json
 Validate current configuration and environment.
 
 ```bash
+# If installed globally
 nightly-code validate
 nightly-code validate --fix
+
+# If installed locally
+npx nightly-code validate
+npx nightly-code validate --fix
 ```
 
 **Options:**
@@ -242,9 +306,15 @@ nightly-code validate --fix
 Generate and view session reports.
 
 ```bash
+# If installed globally
 nightly-code report
 nightly-code report 2024-01-15 --format markdown
 nightly-code report --last 5 --output report.json
+
+# If installed locally
+npx nightly-code report
+npx nightly-code report 2024-01-15 --format markdown
+npx nightly-code report --last 5 --output report.json
 ```
 
 **Options:**
@@ -643,10 +713,18 @@ claude-code --version
 
 ```bash
 # Check configuration syntax
+# If installed globally
 nightly-code validate
 
+# If installed locally
+npx nightly-code validate
+
 # Fix common issues automatically
+# If installed globally
 nightly-code validate --fix
+
+# If installed locally
+npx nightly-code validate --fix
 ```
 
 #### "Git repository not found"
@@ -679,7 +757,11 @@ Enable detailed logging:
 export NIGHTLY_CODE_LOG_LEVEL=debug
 
 # Run with verbose output
+# If installed globally
 nightly-code run --verbose
+
+# If installed locally
+npx nightly-code run --verbose
 ```
 
 ### Log Files
@@ -779,6 +861,6 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and updates.
     <strong>Transform your development workflow with automated coding sessions</strong>
   </p>
   <p>
-    Made with ❤️ by the Nightly Code team
+    Made with ❤️ by the Paolo Barbato
   </p>
 </div>
