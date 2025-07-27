@@ -483,32 +483,8 @@ describe('Orchestrator', () => {
       expect(result).toBe(originalPrompt);
     });
 
-    it('should extract optimized commands correctly', () => {
-      // Test various output formats
-      const testCases = [
-        {
-          output: '/analyze @src/ --think --seq',
-          expected: '/analyze @src/ --think --seq'
-        },
-        {
-          output: 'Optimized: /build "component" --magic',
-          expected: '/build "component" --magic'
-        },
-        {
-          output: 'The optimal command is `/improve @. --validate`',
-          expected: '/improve @. --validate'
-        },
-        {
-          output: 'Command: /test --coverage',
-          expected: '/test --coverage'
-        }
-      ];
-
-      testCases.forEach(({ output, expected }) => {
-        const result = orchestrator.extractOptimizedCommand(output);
-        expect(result).toBe(expected);
-      });
-    });
+    // Test for extractOptimizedCommand removed since the method has been removed
+    // The optimization now uses raw output directly from the AI model
 
     it('should not optimize prompts when SuperClaude is disabled', async () => {
       orchestrator.superclaudeConfig = { enabled: false };

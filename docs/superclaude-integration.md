@@ -186,8 +186,7 @@ superclaude:
 
 ### Methods
 
-- `optimizePromptWithSuperClaude(prompt)`: Optimizes a prompt using SuperClaude
-- `extractOptimizedCommand(output)`: Extracts optimized command from Claude output
+- `optimizePromptWithSuperClaude(prompt)`: Optimizes a prompt using SuperClaude (now uses raw output directly)
 
 ## Best Practices
 

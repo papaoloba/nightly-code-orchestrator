@@ -888,15 +888,22 @@ class Orchestrator extends EventEmitter {
     this.logger.info(`✅ ${limitType.charAt(0).toUpperCase() + limitType.slice(1)} wait completed. Resuming execution...`);
   }
 
-  async optimizePromptWithSuperClaude (originalPrompt) {
+  async optimizePromptWithSuperClaude (originalPrompt, retryCount = 0) {
     this.logger.info('🧠 Optimizing prompt with SuperClaude Framework...');
 
     // Use the complete optimization guide with the prompt
-    const optimizationPrompt = SUPERCLAUDE_OPTIMIZATION_GUIDE.replace('{PROMPT}', originalPrompt);
+    let optimizationPrompt = SUPERCLAUDE_OPTIMIZATION_GUIDE.replace('{PROMPT}', originalPrompt);
+
+    // Add stricter instructions on retry to ensure /sc: prefix
+    if (retryCount > 0) {
+      optimizationPrompt += '\n\nIMPORTANT: The output MUST be a single line starting with "/sc:" ' +
+        'followed by the command and all its arguments. No other text or explanation.';
+    }
 
     try {
       // Execute Claude Code with the optimization prompt
-      this.logger.info('📝 Running prompt optimization...');
+      const retryInfo = retryCount > 0 ? ` (retry ${retryCount})` : '';
+      this.logger.info(`📝 Running prompt optimization...${retryInfo}`);
 
       // Log the optimization prompt itself
       this.logPrompt(optimizationPrompt, 'SuperClaude Optimization Request');
@@ -906,14 +913,25 @@ class Orchestrator extends EventEmitter {
         workingDir: this.options.workingDir
       });
 
-      // Extract the optimized command from the output
-      const optimizedCommand = this.extractOptimizedCommand(result.stdout);
+      // Use the raw output directly since the guide instructs to return ONLY the command
+      const optimizedCommand = result.stdout.trim();
 
-      if (optimizedCommand && optimizedCommand !== originalPrompt) {
-        this.logger.info(`✅ Prompt optimized to: ${optimizedCommand}`);
-        // Log the optimized prompt
-        this.logPrompt(optimizedCommand, 'SuperClaude Optimized');
-        return optimizedCommand;
+      // Check if it's a valid command
+      if (optimizedCommand && optimizedCommand.startsWith('/')) {
+        // Check if output starts with /sc: - if not, retry with stricter instructions
+        if (!optimizedCommand.startsWith('/sc:') && retryCount === 0) {
+          this.logger.warn(`⚠️  Output doesn't start with /sc: pattern: ${optimizedCommand}`);
+          this.logger.info('🔄 Retrying to ensure /sc: prefix...');
+          return this.optimizePromptWithSuperClaude(originalPrompt, 1);
+        }
+
+        // Accept the command if it's different from original or starts with /sc:
+        if (optimizedCommand !== originalPrompt || optimizedCommand.startsWith('/sc:')) {
+          this.logger.info(`✅ Prompt optimized to: ${optimizedCommand}`);
+          // Log the optimized prompt
+          this.logPrompt(optimizedCommand, 'SuperClaude Optimized');
+          return optimizedCommand;
+        }
       } else {
         this.logger.warn('⚠️  No optimization found, using original prompt');
         return originalPrompt;
@@ -925,57 +943,11 @@ class Orchestrator extends EventEmitter {
     }
   }
 
-  extractOptimizedCommand (output) {
-    if (!output) return null;
-
-    // Look for SuperClaude command patterns in the output
-    const lines = output.split('\n');
-
-    // Common patterns for optimized commands
-    const commandPatterns = [
-      /^\/\w+\s+.*$/m, // Slash commands starting at line beginning
-      /optimized:\s*(.+)$/im, // "Optimized: /command ..."
-      /optimal.*command:\s*(.+)$/im, // "Optimal SC Command: /command ..."
-      /command:\s*(.+)$/im, // "Command: /command ..."
-      /`([^`]+)`/ // Commands in backticks
-    ];
-
-    // First, try to find patterns in the full output
-    for (const pattern of commandPatterns) {
-      const matches = output.matchAll(new RegExp(pattern, 'gm'));
-      for (const match of matches) {
-        const command = match[1] || match[0];
-        const cleanCommand = command.replace(/`/g, '').trim();
-        // Ensure it's a valid SuperClaude command
-        if (cleanCommand.startsWith('/')) {
-          return cleanCommand;
-        }
-      }
-    }
-
-    // If no pattern match, look for slash commands line by line
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      // Skip lines that are clearly not commands
-      if (trimmedLine.startsWith('#') || trimmedLine.startsWith('//') || trimmedLine.startsWith('*')) {
-        continue;
-      }
-      // Check if line contains a slash command
-      const commandMatch = trimmedLine.match(/\/\w+\s+[^#]*/);
-      if (commandMatch) {
-        return commandMatch[0].trim();
-      }
-    }
-
-    return null;
-  }
-
   async sleep (ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   logPrompt (prompt, type = 'Prompt') {
-    const separator = '═'.repeat(70);
     const promptLines = prompt.split('\n');
     const maxPreviewLines = 50;
     const isLongPrompt = promptLines.length > maxPreviewLines;

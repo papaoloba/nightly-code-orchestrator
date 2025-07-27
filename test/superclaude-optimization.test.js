@@ -58,59 +58,62 @@ describe('SuperClaude Prompt Optimization', () => {
 
       expect(result).toBe(originalPrompt);
     });
-  });
 
-  describe('extractOptimizedCommand', () => {
-    it('should extract slash commands from various formats', () => {
-      const testCases = [
-        {
-          input: '/analyze @src/ --think --seq',
-          expected: '/analyze @src/ --think --seq'
-        },
-        {
-          input: 'Optimized: /build "component" --magic',
-          expected: '/build "component" --magic'
-        },
-        {
-          input: 'The optimal command is `/improve @. --validate`',
-          expected: '/improve @. --validate'
-        },
-        {
-          input: 'Command: /test --coverage',
-          expected: '/test --coverage'
-        },
-        {
-          input: 'Optimal SC Command: /troubleshoot @. --focus typescript',
-          expected: '/troubleshoot @. --focus typescript'
-        },
-        {
-          input: `Based on analysis:
-/implement "user authentication" --think --validate --seq`,
-          expected: '/implement "user authentication" --think --validate --seq'
+    it('should retry optimization to ensure /sc: prefix in output', async () => {
+      // Mock logger
+      orchestrator.logger.warn = jest.fn();
+      orchestrator.logger.info = jest.fn();
+      
+      // Mock executeClaudeCodeSingle to return non-/sc: pattern first, then correct
+      let callCount = 0;
+      orchestrator.executeClaudeCodeSingle = jest.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First call returns regular command (not /sc:)
+          return Promise.resolve({ stdout: '/analyze @src/ --think' });
+        } else {
+          // Second call returns correct /sc: pattern
+          return Promise.resolve({ stdout: '/sc:analyze @src/ --think --context full' });
         }
-      ];
-
-      testCases.forEach(({ input, expected }) => {
-        const result = orchestrator.extractOptimizedCommand(input);
-        expect(result).toBe(expected);
       });
+
+      const originalPrompt = 'analyze my code with context';
+      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
+
+      expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledTimes(2);
+      expect(result).toBe('/sc:analyze @src/ --think --context full');
+      
+      // Verify warning was logged for first attempt
+      expect(orchestrator.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Output doesn't start with /sc: pattern")
+      );
+      expect(orchestrator.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("Retrying to ensure /sc: prefix")
+      );
     });
 
-    it('should return null for invalid outputs', () => {
-      const testCases = [
-        '',
-        null,
-        undefined,
-        'No command here',
-        'Just some text without a slash command'
-      ];
-
-      testCases.forEach(input => {
-        const result = orchestrator.extractOptimizedCommand(input);
-        expect(result).toBeNull();
+    it('should accept /sc: commands on first try without retry', async () => {
+      // Mock logger
+      orchestrator.logger.info = jest.fn();
+      
+      // Mock executeClaudeCodeSingle to return /sc: command on first try
+      orchestrator.executeClaudeCodeSingle = jest.fn().mockResolvedValue({
+        stdout: '/sc:build "GraphQL API" --rate-limit 1000 --think'
       });
+
+      const originalPrompt = 'Build a GraphQL API with rate limiting at 1000 requests per hour';
+      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
+
+      expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledTimes(1);
+      expect(result).toBe('/sc:build "GraphQL API" --rate-limit 1000 --think');
+      expect(orchestrator.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('✅ Prompt optimized to:')
+      );
     });
   });
+
+  // Tests for extractOptimizedCommand removed since the method has been removed
+  // The optimization now uses raw output directly from the AI model
 
   describe('executeClaudeCode integration', () => {
     beforeEach(() => {
@@ -136,6 +139,25 @@ describe('SuperClaude Prompt Optimization', () => {
 
       expect(orchestrator.optimizePromptWithSuperClaude).toHaveBeenCalledWith('analyze my code');
       expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledWith('/analyze @. --think', expect.any(Object));
+    });
+
+    it('should preserve context in optimization', async () => {
+      orchestrator.superclaudeConfig = { enabled: true };
+      orchestrator.superclaudeIntegration = { isEnabled: () => true };
+      orchestrator.options.enableRetryOnLimits = false;
+
+      // Mock context-preserving optimization
+      orchestrator.optimizePromptWithSuperClaude.mockResolvedValue(
+        '/implement "GraphQL API with rate limiting (1000 req/hour)" --type api --focus performance --validate'
+      );
+
+      await orchestrator.executeClaudeCode('Build a GraphQL API with rate limiting at 1000 requests per hour');
+
+      expect(orchestrator.optimizePromptWithSuperClaude).toHaveBeenCalledWith('Build a GraphQL API with rate limiting at 1000 requests per hour');
+      expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledWith(
+        '/implement "GraphQL API with rate limiting (1000 req/hour)" --type api --focus performance --validate',
+        expect.any(Object)
+      );
     });
 
     it('should not optimize prompts when SuperClaude is disabled', async () => {

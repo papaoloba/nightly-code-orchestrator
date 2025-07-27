@@ -6,21 +6,28 @@ that adhere to framework principles, syntax rules, and command specifications.
 
 ## Core Principle
 
-**Transform natural language → Optimal SC command adhering to COMMANDS.md, FLAGS.md, PRINCIPLES.md, and RULES.md**
+**Transform natural language → Optimal SC command that PRESERVES task-specific information while adhering to COMMANDS.md, FLAGS.md, PRINCIPLES.md, and RULES.md**
+
+### Task Information Preservation Rules
+
+1. **Preserve Specifics**: Maintain specific file names, paths, technologies, requirements
+2. **Context Retention**: Keep domain-specific terminology and constraints
+3. **Detail Preservation**: Retain quantitative metrics, deadlines, and success criteria
+4. **Requirement Mapping**: Translate business requirements into technical flags
+5. **Intelligent Abstraction**: Only generalize when specifics aren't provided
 
 ## Command Selection Matrix
 
-### 1. Parse Intent → Select Command
+### 1. Parse Intent + Extract Context → Select Command + Preserve Details
 
-| User Intent | Keywords | SC Command | Auto-Activations |
-|------------|----------|------------|------------------|
-| Create/Build | "create", "build", "make", "implement" | \`/build\` or \`/implement\` |
-Frontend/Backend persona, Magic/Context7 |
-| Analyze/Investigate | "analyze", "check", "review", "investigate" | \`/analyze\` | Analyzer persona, Sequential |
-| Fix/Debug | "fix", "debug", "troubleshoot", "solve" | \`/troubleshoot\` | Analyzer persona, Sequential |
-| Improve/Optimize | "improve", "optimize", "enhance", "refactor" | \`/improve\` | Refactorer/Performance persona |
-| Document | "document", "write docs", "explain" | \`/document\` | Scribe persona, Context7 |
-| Test | "test", "validate", "verify" | \`/test\` | QA persona, Playwright |
+| User Intent | Keywords | SC Command | Context Preservation Strategy |
+|------------|----------|------------|------------------------------|
+| Create/Build | "create", "build", "make", "implement" | \`/build\` or \`/implement\` | Preserve: technology stack, component names, specific requirements, design specs |
+| Analyze/Investigate | "analyze", "check", "review", "investigate" | \`/analyze\` | Preserve: target paths, analysis scope, specific metrics, performance criteria |
+| Fix/Debug | "fix", "debug", "troubleshoot", "solve" | \`/troubleshoot\` | Preserve: error messages, symptoms, affected components, reproduction steps |
+| Improve/Optimize | "improve", "optimize", "enhance", "refactor" | \`/improve\` | Preserve: performance targets, quality metrics, specific improvement areas |
+| Document | "document", "write docs", "explain" | \`/document\` | Preserve: documentation type, target audience, specific topics, format requirements |
+| Test | "test", "validate", "verify" | \`/test\` | Preserve: test types, coverage requirements, specific scenarios, acceptance criteria |
 
 ### 2. Assess Complexity → Add Flags
 
@@ -117,62 +124,62 @@ System-level:
 /analyze @large-project/ --uc --delegate auto
 \`\`\`
 
-## Optimization Patterns
+## Context-Preserving Optimization Patterns
 
-### Pattern 1: Frontend Development
+### Pattern 1: Frontend Development with Specifics
 
 \`\`\`bash
-# Unstructured: "Create a responsive dashboard with charts"
+# Unstructured: "Create a responsive dashboard with charts showing user analytics data using React and Chart.js"
 # Optimized:
-/build "responsive dashboard" --magic --c7 --focus accessibility
+/implement "responsive dashboard with user analytics charts" --type component --framework react --magic --c7 --focus accessibility
 
-# Why optimal:
-# - Uses /build for creation
-# - --magic for UI components
-# - --c7 for framework patterns
-# - --focus accessibility for best practices
+# Context Preserved:
+# - Specific libraries: React, Chart.js mentioned in command description
+# - Data type: "user analytics" retained in command
+# - Technology stack: --framework react preserves tech choice
+# - Responsive requirement: retained in component description
 \`\`\`
 
-### Pattern 2: Backend API
+### Pattern 2: Backend API with Requirements
 
 \`\`\`bash
-# Unstructured: "Build a REST API with authentication"
+# Unstructured: "Build a REST API for user management with JWT authentication, role-based access control, and rate limiting at 100 requests per minute"
 # Optimized:
-/implement "REST API with auth" --think --seq --validate
+/implement "REST API for user management with JWT auth, RBAC, rate limiting (100 req/min)" --type api --focus security --think --seq --validate
 
-# Why optimal:
-# - Uses /implement for feature development
-# - --think for moderate complexity
-# - --seq for systematic approach
-# - --validate for security
+# Context Preserved:
+# - Specific auth method: JWT mentioned in description
+# - Security model: RBAC (role-based access control) specified
+# - Performance requirement: 100 requests/min rate limit preserved
+# - Domain: "user management" context retained
 \`\`\`
 
-### Pattern 3: System Analysis
+### Pattern 3: System Analysis with Metrics
 
 \`\`\`bash
-# Unstructured: "Find performance bottlenecks in my application"
+# Unstructured: "Find performance bottlenecks in my Node.js e-commerce application - API response times are over 2 seconds and database queries are slow"
 # Optimized:
-/analyze @. --focus performance --think-hard --persona-performance
+/analyze @src/ --focus performance --think-hard --persona-performance "Node.js e-commerce app with API response >2s, slow DB queries"
 
-# Why optimal:
-# - Uses /analyze for investigation
-# - --focus performance for targeted analysis
-# - --think-hard for deep analysis
-# - Auto-activates performance persona
+# Context Preserved:
+# - Technology: Node.js specified in command
+# - Application type: e-commerce context retained
+# - Performance metric: >2 second response time threshold preserved
+# - Specific symptom: slow database queries mentioned
 \`\`\`
 
-### Pattern 4: Code Quality
+### Pattern 4: Code Quality with Targets
 
 \`\`\`bash
-# Unstructured: "Clean up and improve code quality"
+# Unstructured: "Clean up and improve code quality in the payment processing module - reduce cyclomatic complexity below 10 and achieve 90% test coverage"
 # Optimized:
-/improve @src/ --focus quality --loop --validate
+/improve @src/payment/ --focus quality --loop --validate "reduce complexity <10, achieve 90% test coverage"
 
-# Why optimal:
-# - Uses /improve for enhancement
-# - --focus quality for targeted improvement
-# - --loop for iterative refinement
-# - --validate for quality gates
+# Context Preserved:
+# - Specific module: payment processing targeted via @src/payment/
+# - Quality metric: cyclomatic complexity <10 retained
+# - Coverage target: 90% test coverage specified
+# - Business domain: payment processing context maintained
 \`\`\`
 
 ## Wave Mode Optimization
@@ -289,82 +296,108 @@ Step 5 - Enable Intelligence:
   ✓ Allow flag precedence
 \`\`\`
 
-## Quick Transformation Examples
+## Context-Preserving Transformation Examples
 
 \`\`\`bash
-# "Fix the TypeScript errors"
-/troubleshoot @. --focus typescript --delegate auto
+# "Fix the TypeScript strict mode errors in the auth service"
+/troubleshoot @src/auth/ --focus typescript "strict mode errors in auth service" --validate
 
-# "Make the code more maintainable"
-/improve @src/ --focus quality --persona-refactorer --loop
+# "Make the user management code more maintainable for the new team members"
+/improve @src/user-management/ --focus quality --persona-refactorer --loop "improve maintainability for new team"
 
-# "Add user authentication"
-/implement "user authentication" --think --validate --seq
+# "Add OAuth 2.0 authentication with Google and GitHub providers"
+/implement "OAuth 2.0 authentication with Google/GitHub providers" --type feature --focus security --think --validate --seq
 
-# "Document the entire API"
-/document @api/ --persona-scribe=en --c7
+# "Document the REST API endpoints with OpenAPI 3.0 specification"
+/document @api/ --persona-scribe=en --c7 "REST API with OpenAPI 3.0 spec"
 
-# "Optimize database queries"
-/improve @db/ --focus performance --think-hard --validate
+# "Optimize PostgreSQL queries causing 5+ second response times"
+/improve @src/database/ --focus performance --think-hard --validate "PostgreSQL queries >5s response time"
 
-# "Create a design system"
-/design "design system" --wave-mode auto --magic --c7
+# "Create a Material Design component library for the mobile app"
+/design "Material Design component library for mobile" --wave-mode auto --magic --c7
 
-# "Security audit the application"
-/analyze @. --focus security --ultrathink --wave-validation
+# "Security audit for GDPR compliance in data processing workflows"
+/analyze @. --focus security --ultrathink --wave-validation "GDPR compliance audit for data workflows"
 
-# "Modernize legacy code"
-/improve @legacy/ --wave-mode enterprise --delegate auto
+# "Modernize legacy PHP codebase to Laravel 10 with automated testing"
+/improve @legacy-php/ --wave-mode enterprise --delegate auto "migrate to Laravel 10 with automated testing"
 \`\`\`
 
-## Common Mistakes to Avoid
+## Common Context-Loss Mistakes to Avoid
 
 \`\`\`bash
-# ❌ Wrong: Vague targets
-/improve "everything"
+# ❌ Wrong: Losing specific details
+Original: "Fix the React hooks memory leak in UserProfile component"
+Bad optimization: /troubleshoot @. --focus performance
+# Lost: React hooks, memory leak type, specific component
 
-# ✅ Right: Specific targets
-/improve @src/ --focus performance
+# ✅ Right: Preserving specific context
+/troubleshoot @src/UserProfile/ --focus performance "React hooks memory leak in UserProfile component" --validate
 
-# ❌ Wrong: Relative paths
-/analyze ../components
+# ❌ Wrong: Generic abstraction of requirements
+Original: "Implement GraphQL API with rate limiting at 1000 requests per hour"
+Bad optimization: /implement "API" --validate
+# Lost: GraphQL, specific rate limit
 
-# ✅ Right: @ notation
-/analyze @components/
+# ✅ Right: Requirement preservation
+/implement "GraphQL API with rate limiting (1000 req/hour)" --type api --focus performance --validate
 
-# ❌ Wrong: Multiple operations
-/build and test and document
+# ❌ Wrong: Technology-agnostic when tech is specified
+Original: "Migrate MongoDB collections to PostgreSQL with zero downtime"
+Bad optimization: /improve @database/ --focus performance
+# Lost: MongoDB → PostgreSQL migration, zero downtime requirement
 
-# ✅ Right: Sequential commands
-/build "feature" && /test @feature/ && /document @feature/
+# ✅ Right: Technology and constraint preservation
+/improve @database/ --focus migration "MongoDB to PostgreSQL zero-downtime migration" --validate --think-hard
 
-# ❌ Wrong: Over-flagging
-/analyze --think --think-hard --ultrathink --all-mcp --verbose
+# ❌ Wrong: Losing quantitative targets
+Original: "Achieve 95% test coverage on payment processing with sub-100ms response times"
+Bad optimization: /improve @payment/ --focus quality
+# Lost: 95% coverage target, sub-100ms performance requirement
 
-# ✅ Right: Appropriate complexity
-/analyze --think-hard --seq
+# ✅ Right: Metric preservation
+/improve @src/payment/ --focus quality --validate "achieve 95% test coverage, <100ms response times"
 \`\`\`
 
-## Optimization Formula
+## Enhanced Optimization Formula
 
 \`\`\`
 Optimal SC Command = 
   Base Command (intent match) +
-  Target (@ notation) +
-  Complexity Flags (if needed) +
-  Optimization Flags (scope-based) +
-  Validation (if critical)
+  Target (@ notation + specifics) +
+  Context-Rich Description (preserve key details) +
+  Appropriate Flags (complexity + requirements) +
+  Validation (if critical) +
+  Preserved Metrics/Constraints
 \`\`\`
+
+## Context Extraction Guidelines
+
+### CRITICAL: Before optimization, extract and preserve:
+
+1. **Technical Specifics**: Technologies, frameworks, libraries, versions
+2. **Quantitative Requirements**: Performance metrics, coverage targets, timelines
+3. **Business Context**: Domain, user types, specific use cases
+4. **Constraints**: Security requirements, compatibility needs, resource limits
+5. **Quality Criteria**: Acceptance criteria, success metrics, validation requirements
+
+### Optimization Process:
+
+1. **Parse**: Extract intent, context, specifics, and constraints
+2. **Map**: Match intent to command while preserving context
+3. **Enhance**: Add appropriate flags based on complexity and requirements
+4. **Validate**: Ensure all critical information is preserved in the optimized command
+5. **Verify**: Optimized command should be more specific than original, not more generic
 
 ## Summary
 
-The key to optimal SuperClaude prompts is understanding that the framework's intelligence handles 
-complexity for you. Start with the right command, add appropriate targets, let auto-activation work, 
-and only add flags when truly needed. The framework will optimize execution through personas, 
-MCP servers, wave orchestration, and delegation as appropriate.
+Enhanced SuperClaude optimization PRESERVES task-specific information while leveraging framework intelligence. 
+The goal is to create more precise, actionable commands that maintain all critical context from the original request.
+Never sacrifice specificity for syntax compliance - preserve what matters to achieve the intended outcome.
 
 Transform this prompt: "{PROMPT}"
 
-Return ONLY the optimized command starting with /, nothing else.`;
+CRITICAL INSTRUCTION: Preserve ALL specific details, technologies, metrics, and requirements from the original prompt in your optimized command. Return ONLY the optimized command starting with /sc:, nothing else. The output MUST be a single line starting with "/sc:" followed by the command and all its arguments.`;
 
 module.exports = { SUPERCLAUDE_OPTIMIZATION_GUIDE };
