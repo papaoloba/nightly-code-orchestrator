@@ -13,6 +13,7 @@ const { Reporter } = require('./reporter');
 const { SuperClaudeIntegration } = require('./superclaude-integration');
 const { SUPERCLAUDE_OPTIMIZATION_GUIDE } = require('./superclaude-optimization-guide');
 const { TIME, STORAGE, RETRY, LIMITS } = require('./constants');
+const PrettyLogger = require('./pretty-logger');
 
 /**
  * Main orchestrator for nightly-claude-code automation
@@ -86,6 +87,9 @@ class Orchestrator extends EventEmitter {
       claudeProcess: null,
       sessionId: this.generateSessionId()
     };
+
+    // Initialize pretty logger for enhanced UI
+    this.prettyLogger = new PrettyLogger();
 
     this.setupLogging();
     this.setupComponents();
@@ -315,12 +319,31 @@ class Orchestrator extends EventEmitter {
    */
   async run () {
     try {
-      this.logger.info('');
-      this.logger.info('🚀 Starting Nightly Code Orchestration Session');
-      this.logger.info('═══════════════════════════════════════════════');
-      this.logger.info(`📋 Session ID: ${this.state.sessionId}`);
-      this.logger.info(`📁 Working Directory: ${this.options.workingDir}`);
-      this.logger.info('');
+      // Display fancy banner
+      console.clear();
+      this.prettyLogger.banner('Nightly Code', 'Standard');
+      this.prettyLogger.divider('═', 60, 'cyan');
+      console.log();
+
+      // Show session info in a styled box
+      const workingDirDisplay = this.options.workingDir.length > 45
+        ? `📁 Working Directory:\n    ${this.options.workingDir}`
+        : `📁 Working Directory: ${this.options.workingDir}`;
+
+      this.prettyLogger.box([
+        '🌙 Nightly Code Orchestration Session',
+        '',
+        `📋 Session ID: ${this.state.sessionId}`,
+        workingDirDisplay,
+        `⏱️  Max Duration: ${Math.round(this.options.maxDuration / 3600)} hours`,
+        `🔄 Mode: ${this.options.dryRun ? 'DRY RUN' : 'LIVE'}`
+      ].join('\n'), {
+        borderStyle: 'double',
+        borderColor: this.options.dryRun ? 'yellow' : 'blue',
+        padding: 1,
+        align: 'left'
+      });
+      console.log();
 
       this.state.startTime = Date.now();
 
@@ -375,8 +398,8 @@ class Orchestrator extends EventEmitter {
 
   async validateEnvironment () {
     this.startOperation('environment-validation');
-    this.logger.info('🔧 Validating Environment');
-    this.logger.info('─────────────────────────');
+    this.prettyLogger.info('🔧 Validating Environment');
+    this.prettyLogger.divider('─', 30, 'gray');
 
     // Check if Claude Code is available
     try {
@@ -426,8 +449,8 @@ class Orchestrator extends EventEmitter {
 
   async loadTasks () {
     this.startOperation('task-loading');
-    this.logger.info('📋 Loading Tasks');
-    this.logger.info('─────────────────');
+    this.prettyLogger.info('📋 Loading Tasks');
+    this.prettyLogger.divider('─', 30, 'gray');
 
     const tasks = await this.taskManager.loadTasks();
     const orderedTasks = await this.taskManager.resolveDependencies(tasks);
@@ -435,21 +458,36 @@ class Orchestrator extends EventEmitter {
     const totalTasks = orderedTasks.length;
     const estimatedDuration = orderedTasks.reduce((sum, task) => sum + (task.estimated_duration || 0), 0);
 
-    this.logger.info(`✅ Loaded ${totalTasks} tasks`);
-    this.logger.info(`⏱️  Estimated duration: ${Math.round(estimatedDuration)} minutes`);
+    this.prettyLogger.success(`✅ Loaded ${totalTasks} tasks`);
+    this.prettyLogger.info(`⏱️  Estimated duration: ${Math.round(estimatedDuration)} minutes`);
 
-    // Show task overview
+    // Show task overview in a pretty table
     if (orderedTasks.length > 0) {
-      this.logger.info('📝 Task Overview:');
+      console.log();
+      const tableData = [
+        ['#', 'Priority', 'Task', 'Duration', 'Type']
+      ];
+
       orderedTasks.forEach((task, index) => {
         const priority = task.priority || 'medium';
-        const priorityIcon = priority === 'high' ? '🔴' : priority === 'low' ? '🟢' : '🟡';
-        this.logger.info(`   ${index + 1}. ${priorityIcon} ${task.title} (${task.estimated_duration || 60}min)`);
+        const priorityIcon = priority === 'high' ? '🔴 High' : priority === 'low' ? '🟢 Low' : '🟡 Medium';
+        tableData.push([
+          `${index + 1}`,
+          priorityIcon,
+          task.title,
+          `${task.estimated_duration || 60}m`,
+          task.type || 'general'
+        ]);
+      });
+
+      this.prettyLogger.table(tableData, {
+        columnWidths: [4, 12, 40, 10, 12],
+        align: ['center', 'center', 'left', 'center', 'center']
       });
     }
 
     this.logWithTiming('info', '', 'task-loading'); // Just show timing without duplicate message
-    this.logger.info('');
+    console.log();
     return orderedTasks;
   }
 
@@ -481,13 +519,14 @@ class Orchestrator extends EventEmitter {
         const taskOperationName = `task-${task.id}`;
         this.startOperation(taskOperationName);
 
-        // Task header
-        this.logger.info('');
-        this.logger.info(`📋 Task ${taskNum}/${totalTasks}: ${task.title}`);
-        this.logger.info('─'.repeat(LIMITS.LOG_LINE_REPEAT_COUNT));
-        this.logger.info(`🔧 Type: ${task.type}`);
-        this.logger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
-        this.logger.info(`🆔 ID: ${task.id}`);
+        // Task header with pretty display
+        console.log();
+        this.prettyLogger.divider('═', 60, 'blue');
+        this.prettyLogger.info(`📋 Task ${taskNum}/${totalTasks}: ${task.title}`);
+        this.prettyLogger.divider('─', 60, 'gray');
+        this.prettyLogger.info(`🔧 Type: ${task.type}`);
+        this.prettyLogger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
+        this.prettyLogger.info(`🆔 ID: ${task.id}`);
 
         // Create task branch if using task-based PR strategy
         if (!this.options.dryRun) {
@@ -580,11 +619,16 @@ class Orchestrator extends EventEmitter {
     const prompt = await this.generateTaskPrompt(task);
 
     const timeoutMinutes = Math.round(timeoutMs / TIME.MS.ONE_MINUTE);
-    this.logger.info('');
-    this.logger.info(`\x1b[93m┌${'─'.repeat(68)}┐\x1b[0m`);
-    this.logger.info(`\x1b[93m│\x1b[0m 🤖 \x1b[1mExecuting task with Claude Code\x1b[0m${' '.repeat(33)} \x1b[93m│\x1b[0m`);
-    this.logger.info(`\x1b[93m│\x1b[0m ⏱️  Timeout: ${timeoutMinutes.toString().padEnd(3)} minutes${' '.repeat(42)} \x1b[93m│\x1b[0m`);
-    this.logger.info(`\x1b[93m└${'─'.repeat(68)}┘\x1b[0m`);
+    console.log();
+    this.prettyLogger.box([
+      `🤖 Executing task with Claude Code`,
+      `⏱️  Timeout: ${timeoutMinutes} minutes`
+    ].join('\n'), {
+      borderStyle: 'single',
+      borderColor: 'yellow',
+      padding: 1,
+      align: 'left'
+    });
 
     try {
       if (this.options.dryRun) {
@@ -925,7 +969,7 @@ class Orchestrator extends EventEmitter {
           this.logger.info('🔄 Retrying to ensure correct /sc:command format...');
           return this.optimizePromptWithSuperClaude(originalPrompt, retryCount + 1);
         }
-        
+
         // Check if output starts with /sc: - if not, retry with stricter instructions
         if (!optimizedCommand.startsWith('/sc:') && retryCount === 0) {
           this.logger.warn(`⚠️  Output doesn't start with /sc: pattern: ${optimizedCommand}`);
@@ -1433,25 +1477,72 @@ Please implement this task now.`;
     // Generate and save report
     const report = await this.reporter.generateSessionReport(this.state, results);
 
-    // Display final summary
-    this.logger.info('');
-    this.logger.info('📊 Session Summary');
-    this.logger.info('═══════════════════');
-    this.logger.info(`🆔 Session: ${this.state.sessionId}`);
-    this.logger.info(`⏱️  Duration: ${durationMinutes} minutes`);
-    this.logger.info(`✅ Completed: ${results.completed} tasks`);
-    this.logger.info(`❌ Failed: ${results.failed} tasks`);
-    this.logger.info(`📊 Success Rate: ${results.completed + results.failed > 0 ? Math.round((results.completed / (results.completed + results.failed)) * 100) : 0}%`);
+    // Display final summary with pretty UI
+    console.log();
+    this.prettyLogger.divider('═', 60, 'cyan');
+
+    // Session results table
+    const resultTableData = [
+      [require('chalk').bold('Session Results'), '', '', ''],
+      ['Status', 'Metric', 'Value', 'Result']
+    ];
+
+    const successRate = results.completed + results.failed > 0
+      ? Math.round((results.completed / (results.completed + results.failed)) * 100)
+      : 0;
+
+    // Strip emoji variant selectors for proper table alignment
+    const stripVariants = (str) => str.replace(/\uFE0F/g, '');
+    
+    resultTableData.push(
+      [require('chalk').green(stripVariants('✅')), 'Completed Tasks', `${results.completed}`, require('chalk').green('Success')],
+      [require('chalk').red(stripVariants('❌')), 'Failed Tasks', `${results.failed}`, results.failed > 0 ? require('chalk').red('Failed') : '-'],
+      [require('chalk').blue(stripVariants('📊')), 'Success Rate', `${successRate}%`, successRate >= 80 ? require('chalk').green('Good') : require('chalk').yellow('Needs Improvement')],
+      [require('chalk').yellow(stripVariants('⏱️')), 'Duration', `${durationMinutes}m`, require('chalk').cyan(`${Math.round(durationMinutes / 60 * 10) / 10}h`)]
+    );
+
+    this.prettyLogger.table(resultTableData, {
+      columnWidths: [8, 20, 15, 20],
+      align: ['center', 'left', 'center', 'center'],
+      config: {
+        spanningCells: [
+          { col: 0, row: 0, colSpan: 4, alignment: 'center' }
+        ]
+      }
+    });
+
+    console.log();
+
+    // Summary box
+    const summaryLines = [
+      require('chalk').green.bold('✨ Session Completed Successfully! ✨'),
+      '',
+      `🆔 Session ID: ${this.state.sessionId}`,
+      `📁 Working Directory: ${this.options.workingDir}`,
+      ''
+    ];
 
     if (results.completed > 0 && !this.options.dryRun) {
-      this.logger.info('🎉 All successful tasks have been merged to main branch!');
+      summaryLines.push('🎉 All successful tasks have been merged to main branch!');
     } else if (results.completed > 0 && this.options.dryRun) {
-      this.logger.info('🔄 Dry run mode - tasks would have been merged to main branch');
+      summaryLines.push(require('chalk').yellow('🔄 Dry run mode - tasks would have been merged to main branch'));
     }
 
-    this.logger.info('');
-    this.logger.info('✨ Session completed successfully!');
-    this.logger.info('');
+    if (this.state.failedTasks.length > 0) {
+      summaryLines.push('', require('chalk').red('Failed tasks:'));
+      this.state.failedTasks.forEach(ft => {
+        summaryLines.push(require('chalk').red(`  • ${ft.task.title}: ${ft.error.message}`));
+      });
+    }
+
+    this.prettyLogger.box(summaryLines.join('\n'), {
+      borderStyle: 'round',
+      borderColor: results.failed === 0 ? 'green' : 'yellow',
+      padding: 2,
+      align: 'left'
+    });
+
+    console.log();
   }
 
   async handleFailure (error) {

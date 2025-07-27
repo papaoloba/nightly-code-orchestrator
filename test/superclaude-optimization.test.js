@@ -63,7 +63,7 @@ describe('SuperClaude Prompt Optimization', () => {
       // Mock logger
       orchestrator.logger.warn = jest.fn();
       orchestrator.logger.info = jest.fn();
-      
+
       // Mock executeClaudeCodeSingle to return non-/sc: pattern first, then correct
       let callCount = 0;
       orchestrator.executeClaudeCodeSingle = jest.fn().mockImplementation(() => {
@@ -82,20 +82,20 @@ describe('SuperClaude Prompt Optimization', () => {
 
       expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledTimes(2);
       expect(result).toBe('/sc:analyze @src/ --think --context full');
-      
+
       // Verify warning was logged for first attempt
       expect(orchestrator.logger.warn).toHaveBeenCalledWith(
         expect.stringContaining("Output doesn't start with /sc: pattern")
       );
       expect(orchestrator.logger.info).toHaveBeenCalledWith(
-        expect.stringContaining("Retrying to ensure /sc: prefix")
+        expect.stringContaining('Retrying to ensure /sc: prefix')
       );
     });
 
     it('should accept /sc: commands on first try without retry', async () => {
       // Mock logger
       orchestrator.logger.info = jest.fn();
-      
+
       // Mock executeClaudeCodeSingle to return /sc: command on first try
       orchestrator.executeClaudeCodeSingle = jest.fn().mockResolvedValue({
         stdout: '/sc:build "GraphQL API" --rate-limit 1000 --think'
@@ -115,7 +115,7 @@ describe('SuperClaude Prompt Optimization', () => {
       // Mock logger
       orchestrator.logger.warn = jest.fn();
       orchestrator.logger.info = jest.fn();
-      
+
       // Mock executeClaudeCodeSingle to return incorrect format with space
       orchestrator.executeClaudeCodeSingle = jest.fn()
         .mockResolvedValueOnce({ stdout: '/sc: /document @api/' }) // Wrong format
@@ -126,10 +126,10 @@ describe('SuperClaude Prompt Optimization', () => {
 
       expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledTimes(2);
       expect(result).toBe('/sc:document @api/');
-      
+
       // Verify warning was logged for first attempt
       expect(orchestrator.logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Incorrect format detected (space after colon)")
+        expect.stringContaining('Incorrect format detected (space after colon)')
       );
     });
   });
