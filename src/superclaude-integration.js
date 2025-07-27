@@ -26,7 +26,9 @@ class SuperClaudeIntegration {
 
     try {
       await this.loadCommands();
-      const commandSource = this.useGlobalCommands ? 'global commands' : `local commands from ${this.options.commandsPath}`;
+      const commandSource = this.useGlobalCommands
+        ? 'global commands'
+        : `local commands from ${this.options.commandsPath}`;
       this.options.logger.info(`✅ SuperClaude integration initialized with ${this.commands.size} ${commandSource}`);
     } catch (error) {
       this.options.logger.warn(`⚠️  SuperClaude initialization failed: ${error.message}`);
@@ -266,11 +268,13 @@ class SuperClaudeIntegration {
         score += 8;
       }
 
-      if (commandName === 'analyze' && (taskType === 'bugfix' || taskTitle.includes('debug') || taskTitle.includes('investigate'))) {
+      if (commandName === 'analyze' &&
+          (taskType === 'bugfix' || taskTitle.includes('debug') || taskTitle.includes('investigate'))) {
         score += 8;
       }
 
-      if (commandName === 'improve' && (taskType === 'refactor' || taskTitle.includes('refactor') || taskTitle.includes('optimize'))) {
+      if (commandName === 'improve' &&
+          (taskType === 'refactor' || taskTitle.includes('refactor') || taskTitle.includes('optimize'))) {
         score += 8;
       }
 
@@ -332,13 +336,11 @@ class SuperClaudeIntegration {
       commandDescription: command.description,
       enhancedPrompt: await this.generateEnhancedPrompt(task, command),
       tools: command.allowedTools,
-      executionStrategy: this.determineExecutionStrategy(task, command),
       qualityGates: this.defineQualityGates(task, command)
     };
 
     this.options.logger.debug(`Generated SuperClaude plan for task ${task.id}:`, {
       command: plan.superclaudeCommand,
-      strategy: plan.executionStrategy,
       tools: plan.tools.length
     });
 
@@ -374,122 +376,10 @@ ${command.sections.execution || command.sections.instructions || 'Follow standar
 ## Quality and Validation
 ${command.sections.quality_standards || 'Apply standard quality gates and validation'}
 
-Execute this task using SuperClaude framework patterns with intelligent tool orchestration and expert persona activation.`;
+Execute this task using SuperClaude framework patterns with intelligent tool orchestration and 
+expert persona activation.`;
 
     return basePrompt;
-  }
-
-  determineExecutionStrategy (task, command) {
-    const strategy = {
-      mode: 'assisted', // assisted, autonomous, guided
-      complexity: this.assessTaskComplexity(task),
-      personaActivation: this.determinePersonas(task, command),
-      toolOrchestration: this.planToolUsage(command),
-      qualityLevel: this.determineQualityLevel(task)
-    };
-
-    // Adjust strategy based on task characteristics
-    if (strategy.complexity > 0.7) {
-      strategy.mode = 'guided';
-    } else if (strategy.complexity < 0.3) {
-      strategy.mode = 'autonomous';
-    }
-
-    return strategy;
-  }
-
-  assessTaskComplexity (task) {
-    let complexity = 0.3; // Base complexity
-
-    // Duration-based complexity
-    const duration = task.estimated_duration || 60;
-    if (duration > 180) complexity += 0.3;
-    else if (duration > 90) complexity += 0.2;
-    else if (duration > 45) complexity += 0.1;
-
-    // File count complexity
-    const fileCount = task.files_to_modify?.length || 1;
-    if (fileCount > 10) complexity += 0.2;
-    else if (fileCount > 5) complexity += 0.1;
-
-    // Dependency complexity
-    const depCount = task.dependencies?.length || 0;
-    complexity += depCount * 0.05;
-
-    // Criteria complexity
-    const criteriaCount = task.acceptance_criteria?.length || 0;
-    complexity += Math.min(criteriaCount * 0.02, 0.1);
-
-    // Tag-based complexity
-    const complexTags = ['security', 'performance', 'architecture', 'integration'];
-    const hasComplexTags = task.tags?.some(tag => complexTags.includes(tag));
-    if (hasComplexTags) complexity += 0.1;
-
-    return Math.min(complexity, 1.0);
-  }
-
-  determinePersonas (task, command) {
-    const personas = [];
-    const taskType = task.type?.toLowerCase();
-    const tags = task.tags || [];
-
-    // Primary persona based on task type
-    if (taskType === 'feature') personas.push('architect', 'frontend', 'backend');
-    if (taskType === 'bugfix') personas.push('analyzer');
-    if (taskType === 'refactor') personas.push('refactorer', 'architect');
-    if (taskType === 'test') personas.push('qa');
-    if (taskType === 'docs') personas.push('scribe');
-
-    // Secondary personas based on tags
-    if (tags.includes('security')) personas.push('security');
-    if (tags.includes('performance')) personas.push('performance');
-    if (tags.includes('frontend') || tags.includes('ui')) personas.push('frontend');
-    if (tags.includes('backend') || tags.includes('api')) personas.push('backend');
-    if (tags.includes('architecture')) personas.push('architect');
-
-    return [...new Set(personas)]; // Remove duplicates
-  }
-
-  planToolUsage (command) {
-    const tools = command.allowedTools || [];
-    const plan = {
-      primary: [],
-      secondary: [],
-      sequence: 'parallel' // parallel, sequential, adaptive
-    };
-
-    // Categorize tools by usage pattern
-    const analysisTools = ['Read', 'Grep', 'Glob'];
-    const modificationTools = ['Write', 'Edit', 'MultiEdit'];
-    const executionTools = ['Bash'];
-    const coordinationTools = ['Task', 'TodoWrite'];
-
-    plan.primary = tools.filter(tool =>
-      modificationTools.includes(tool) || analysisTools.includes(tool)
-    );
-    plan.secondary = tools.filter(tool =>
-      executionTools.includes(tool) || coordinationTools.includes(tool)
-    );
-
-    // Determine sequence based on tool mix
-    if (tools.includes('TodoWrite') || tools.includes('Task')) {
-      plan.sequence = 'sequential';
-    } else if (analysisTools.some(tool => tools.includes(tool)) &&
-               modificationTools.some(tool => tools.includes(tool))) {
-      plan.sequence = 'adaptive';
-    }
-
-    return plan;
-  }
-
-  determineQualityLevel (task) {
-    const priority = task.priority || 5;
-    const type = task.type?.toLowerCase();
-
-    if (priority >= 9 || type === 'security') return 'critical';
-    if (priority >= 7 || type === 'bugfix') return 'high';
-    if (priority >= 5) return 'standard';
-    return 'basic';
   }
 
   defineQualityGates (task, command) {

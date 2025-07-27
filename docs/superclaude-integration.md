@@ -9,9 +9,14 @@ Nightly Code now supports SuperClaude Framework integration, which automatically
 When SuperClaude mode is active:
 
 1. **Prompt Interception**: Your natural language prompt is intercepted before execution
-2. **Optimization**: Claude Code runs: `"Optimize the following prompt based on @SUPERCLAUDE_PROMPT_OPTIMIZATION_GUIDE.md: <your_prompt>"`
-3. **Transformation**: Natural language is transformed into an optimal SuperClaude command
+2. **Optimization**: Claude Code uses the embedded SuperClaude Prompt Optimization Guide to transform your prompt
+3. **Transformation**: Natural language is transformed into an optimal SuperClaude command with appropriate flags and parameters
 4. **Execution**: The optimized command is executed instead of the original prompt
+
+The optimization is done entirely through the prompt optimization guide, which intelligently selects:
+- The appropriate SuperClaude command based on intent
+- Necessary flags based on complexity and scope
+- Auto-activations for personas, MCP servers, and wave orchestration
 
 ## Enabling SuperClaude Mode
 
@@ -108,9 +113,10 @@ Find performance bottlenecks in my application
 ## Benefits
 
 1. **Consistency**: All prompts follow SuperClaude best practices
-2. **Efficiency**: Optimal flags and parameters are automatically selected
-3. **Intelligence**: Framework features like personas, MCP servers, and wave orchestration are auto-activated
+2. **Efficiency**: Optimal flags and parameters are automatically selected through the optimization guide
+3. **Intelligence**: Framework features like personas, MCP servers, and wave orchestration are auto-activated by the SuperClaude framework itself
 4. **Simplicity**: Users can write natural language without knowing SuperClaude syntax
+5. **No Manual Configuration**: The optimization guide handles all the complexity - no need to manually determine personas or strategies
 
 ## Command Optimization Patterns
 
