@@ -12,7 +12,8 @@ class GitManager {
       createPR: options.createPR !== false,
       prTemplate: options.prTemplate || null,
       logger: options.logger || console,
-      dryRun: options.dryRun || false
+      dryRun: options.dryRun || false,
+      prStrategy: options.prStrategy || 'task' // Default to task-based PRs
     };
 
     this.git = simpleGit(this.options.workingDir);
@@ -20,6 +21,8 @@ class GitManager {
     this.sessionBranch = null;
     this.sessionBranches = []; // Keep for backward compatibility
     this.operationTimers = new Map();
+    this.taskBranches = new Map(); // Track task branches and their PR info
+    this.completedTasks = new Map(); // Track completed tasks for dependency resolution
   }
 
   // Helper methods for timing git operations
@@ -154,6 +157,11 @@ node_modules/
     this.options.logger.info(`   └─ Base: ${this.originalBranch}`);
 
     try {
+      // Ensure we have an original branch
+      if (!this.originalBranch) {
+        throw new Error('Git repository not initialized. Call ensureRepository() first.');
+      }
+
       // Ensure we're on the original branch and it's up to date
       await this.git.checkout(this.originalBranch);
 
@@ -186,13 +194,63 @@ node_modules/
   }
 
   async createTaskBranch (task) {
-    // Deprecated: Use session branch instead
-    if (!this.sessionBranch) {
-      throw new Error('No session branch created. Use createSessionBranch() first.');
+    if (this.options.prStrategy === 'session') {
+      // Legacy behavior: use session branch
+      if (!this.sessionBranch) {
+        throw new Error('No session branch created. Use createSessionBranch() first.');
+      }
+      this.options.logger.info(`📌 Using session branch for task: ${task.title}`);
+      return this.sessionBranch.branchName;
     }
 
-    this.options.logger.info(`📌 Using session branch for task: ${task.title}`);
-    return this.sessionBranch.branchName;
+    // New behavior: create individual task branch
+    const baseBranch = this.determineBaseBranch(task);
+    const taskBranchName = this.generateTaskBranchName(task);
+
+    if (this.options.dryRun) {
+      this.options.logger.info(`🔄 Dry run mode - would create task branch: ${taskBranchName}`);
+      this.options.logger.info(`   └─ Base: ${baseBranch}`);
+      this.taskBranches.set(task.id, {
+        branchName: taskBranchName,
+        baseBranch,
+        taskId: task.id,
+        createdAt: Date.now()
+      });
+      return taskBranchName;
+    }
+
+    this.startGitOperation('create-task-branch');
+    this.options.logger.info('🌿 Creating task branch');
+    this.options.logger.info(`   └─ Branch: ${taskBranchName}`);
+    this.options.logger.info(`   └─ Base: ${baseBranch}`);
+
+    try {
+      // Ensure we have an original branch
+      if (!this.originalBranch) {
+        throw new Error('Git repository not initialized. Call ensureRepository() first.');
+      }
+
+      // Ensure we're on the base branch
+      await this.git.checkout(baseBranch);
+
+      // Create and checkout new task branch
+      await this.git.checkoutLocalBranch(taskBranchName);
+
+      // Track the task branch
+      this.taskBranches.set(task.id, {
+        branchName: taskBranchName,
+        baseBranch,
+        taskId: task.id,
+        createdAt: Date.now()
+      });
+
+      this.logGitWithTiming('info', `✅ Task branch created successfully from ${baseBranch}`, 'create-task-branch');
+
+      return taskBranchName;
+    } catch (error) {
+      this.options.logger.error(`❌ Failed to create task branch: ${error.message}`);
+      throw new Error(`Failed to create task branch for ${task.id}: ${error.message}`);
+    }
   }
 
   generateSessionBranchName (sessionId) {
@@ -212,6 +270,43 @@ node_modules/
       .slice(0, 30);
 
     return `${this.options.branchPrefix}${date}-${task.id}-${sanitizedTitle}`;
+  }
+
+  generateTaskBranchName (task) {
+    const taskType = task.type || 'task';
+    const sanitizedTitle = task.title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .slice(0, 30);
+
+    return `${this.options.branchPrefix}${taskType}-${task.id}-${sanitizedTitle}`;
+  }
+
+  determineBaseBranch (task) {
+    // Ensure we have an original branch
+    if (!this.originalBranch) {
+      throw new Error('Git repository not initialized. Call ensureRepository() first.');
+    }
+
+    // If no dependencies, use original branch (main)
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return this.originalBranch;
+    }
+
+    // Find the branch of the last dependency
+    const lastDepId = task.dependencies[task.dependencies.length - 1];
+    const depTaskInfo = this.taskBranches.get(lastDepId);
+
+    if (depTaskInfo && depTaskInfo.branchName) {
+      this.options.logger.info(`📎 Task ${task.id} will branch from dependency ${lastDepId}`);
+      return depTaskInfo.branchName;
+    }
+
+    // Dependency not found - this is an error condition
+    const error = new Error(`Task ${task.id} depends on ${lastDepId} which has not been completed`);
+    this.options.logger.error(`❌ ${error.message}`);
+    throw error;
   }
 
   async pullLatestChanges () {
@@ -298,7 +393,11 @@ node_modules/
 
       // Push to remote if configured
       if (this.options.autoPush) {
-        await this.pushSessionBranch();
+        if (this.options.prStrategy === 'task') {
+          await this.pushTaskBranch(task);
+        } else {
+          await this.pushSessionBranch();
+        }
       }
 
       this.options.logger.info(`🎉 Task completed with ${commits.length} commit(s)!`);
@@ -433,6 +532,164 @@ node_modules/
       this.options.logger.warn(`⚠️  Failed to push session branch: ${error.message}`);
       // Don't throw error, as this is not critical for local development
     }
+  }
+
+  async pushTaskBranch (task) {
+    try {
+      const taskBranchInfo = this.taskBranches.get(task.id);
+      if (!taskBranchInfo) {
+        this.options.logger.warn(`⚠️  No task branch found for task ${task.id}`);
+        return;
+      }
+
+      // Check if remote exists
+      const remotes = await this.git.getRemotes(true);
+      if (remotes.length === 0) {
+        this.options.logger.debug('📡 No remote repository configured, skipping push');
+        return;
+      }
+
+      this.options.logger.info('📤 Pushing task branch to remote...');
+
+      // Push task branch to remote
+      await this.git.push('origin', taskBranchInfo.branchName, ['--set-upstream']);
+
+      this.options.logger.info('✅ Task branch pushed to remote');
+    } catch (error) {
+      this.options.logger.warn(`⚠️  Failed to push task branch: ${error.message}`);
+      // Don't throw error, as this is not critical for local development
+    }
+  }
+
+  async createTaskPR (task, result) {
+    if (this.options.dryRun) {
+      this.options.logger.info('🔄 Dry run mode - would create task pull request');
+      this.options.logger.info(`   └─ Title: [Task ${task.id}] ${task.title}`);
+      return `https://github.com/example/repo/pull/dry-run-${task.id}`;
+    }
+
+    try {
+      // Check if GitHub CLI is available
+      const hasGhCli = await this.checkGitHubCLI();
+      if (!hasGhCli) {
+        this.options.logger.warn('⚠️  GitHub CLI not available, skipping PR creation');
+        return;
+      }
+
+      const taskBranchInfo = this.taskBranches.get(task.id);
+      if (!taskBranchInfo) {
+        this.options.logger.warn(`⚠️  No task branch found for task ${task.id}`);
+        return;
+      }
+
+      // Ensure branch is pushed before creating PR
+      if (this.options.autoPush) {
+        await this.pushTaskBranch(task);
+      } else {
+        this.options.logger.warn('⚠️  Auto-push is disabled. Ensure branch is pushed before PR creation.');
+      }
+
+      const prTitle = `[Task ${task.id}] ${task.title}`;
+      const prBody = await this.generateTaskPRBody(task, result);
+
+      this.options.logger.info('🔄 Creating task pull request...');
+      this.options.logger.info(`   └─ Base: ${taskBranchInfo.baseBranch}`);
+      this.options.logger.info(`   └─ Head: ${taskBranchInfo.branchName}`);
+
+      // Create PR using GitHub CLI
+      const cmdResult = await this.executeCommand('gh', [
+        'pr', 'create',
+        '--title', prTitle,
+        '--body', prBody,
+        '--base', taskBranchInfo.baseBranch,
+        '--head', taskBranchInfo.branchName
+      ]);
+
+      if (cmdResult.code === 0) {
+        const prUrl = cmdResult.stdout.trim();
+        this.options.logger.info(`✅ Task pull request created: ${prUrl}`);
+
+        // Store PR URL with task branch info
+        taskBranchInfo.prUrl = prUrl;
+        
+        // Mark task as completed for dependency tracking
+        this.completedTasks.set(task.id, {
+          task,
+          branch: taskBranchInfo.branchName,
+          prUrl
+        });
+
+        return prUrl;
+      } else {
+        throw new Error(cmdResult.stderr);
+      }
+    } catch (error) {
+      this.options.logger.warn(`⚠️  Failed to create task pull request: ${error.message}`);
+      // Don't throw error, as this is not critical
+    }
+  }
+
+  async generateTaskPRBody (task, result) {
+    const body = [];
+
+    body.push('## Task Details');
+    body.push(`- **ID**: ${task.id}`);
+    body.push(`- **Type**: ${task.type || 'feature'}`);
+    body.push(`- **Priority**: ${task.priority || 'medium'}`);
+    body.push('');
+
+    if (task.dependencies && task.dependencies.length > 0) {
+      body.push('## Dependencies');
+      for (const depId of task.dependencies) {
+        const depInfo = this.completedTasks.get(depId);
+        if (depInfo && depInfo.prUrl) {
+          body.push(`- Depends on: ${depInfo.prUrl} (${depId})`);
+        } else {
+          body.push(`- Depends on: ${depId}`);
+        }
+      }
+      const taskBranchInfo = this.taskBranches.get(task.id);
+      body.push(`- Base branch: ${taskBranchInfo.baseBranch}`);
+      body.push('');
+    }
+
+    if (task.requirements) {
+      body.push('## Requirements');
+      body.push(task.requirements);
+      body.push('');
+    }
+
+    if (task.acceptance_criteria && task.acceptance_criteria.length > 0) {
+      body.push('## Acceptance Criteria');
+      task.acceptance_criteria.forEach(criteria => {
+        body.push(`- [x] ${criteria}`);
+      });
+      body.push('');
+    }
+
+    if (result.filesChanged && result.filesChanged.length > 0) {
+      body.push('## Changes');
+      body.push(`- **Files modified**: ${result.filesChanged.length}`);
+      body.push(`- **Files**: ${result.filesChanged.slice(0, 10).join(', ')}${result.filesChanged.length > 10 ? '...' : ''}`);
+      body.push('');
+    }
+
+    body.push('## Test Plan');
+    body.push('- [ ] Manual testing completed');
+    if (task.type !== 'docs') {
+      body.push('- [ ] Unit tests pass');
+      body.push('- [ ] Integration tests pass');
+    }
+    body.push('- [ ] Code review completed');
+    body.push('');
+
+    body.push('---');
+    body.push('🤖 Automated PR by Nightly Code Orchestrator');
+    body.push(`**Task ID**: ${task.id}`);
+    body.push(`**Duration**: ${Math.round((result.duration || 0) / 1000)}s`);
+    body.push(`**Generated**: ${new Date().toISOString()}`);
+
+    return body.join('\n');
   }
 
   async createSessionPR (sessionResults) {
@@ -751,33 +1008,55 @@ All successful tasks merged to main
 
   async cleanupSessionBranches () {
     if (this.options.dryRun) {
-      this.options.logger.info('🔄 Dry run mode - would clean up session branches');
+      this.options.logger.info('🔄 Dry run mode - would clean up branches');
       return;
     }
-
-    // In the new workflow, we only clean up the session branch after PR creation
-    if (!this.sessionBranch) {
-      this.options.logger.info('🧹 No session branch to clean up');
-      return;
-    }
-
-    this.options.logger.info(`🧹 Cleaning up session branch: ${this.sessionBranch.branchName}`);
 
     try {
       // Switch to original branch first
       await this.git.checkout(this.originalBranch);
 
-      // Check if session branch still exists
       const branches = await this.git.branchLocal();
-      if (branches.all.includes(this.sessionBranch.branchName)) {
-        // Delete session branch (it should now be in a PR)
-        this.options.logger.info(`🗑️  Deleting session branch: ${this.sessionBranch.branchName}`);
-        await this.git.deleteLocalBranch(this.sessionBranch.branchName, true);
-        this.options.logger.info('✅ Session branch deleted successfully');
-      }
 
-      // Clear session branch tracking
-      this.sessionBranch = null;
+      if (this.options.prStrategy === 'task') {
+        // Clean up task branches
+        if (this.taskBranches.size > 0) {
+          this.options.logger.info(`🧹 Cleaning up ${this.taskBranches.size} task branches...`);
+
+          for (const [taskId, branchInfo] of this.taskBranches) {
+            try {
+              if (branches.all.includes(branchInfo.branchName)) {
+                this.options.logger.info(`🗑️  Deleting task branch: ${branchInfo.branchName}`);
+                await this.git.deleteLocalBranch(branchInfo.branchName, true);
+              }
+            } catch (error) {
+              this.options.logger.warn(`⚠️  Failed to cleanup branch ${branchInfo.branchName}: ${error.message}`);
+            }
+          }
+
+          this.taskBranches.clear();
+          this.completedTasks.clear();
+        } else {
+          this.options.logger.info('🧹 No task branches to clean up');
+        }
+      } else {
+        // Legacy behavior: clean up session branch
+        if (this.sessionBranch) {
+          this.options.logger.info(`🧹 Cleaning up session branch: ${this.sessionBranch.branchName}`);
+
+          if (branches.all.includes(this.sessionBranch.branchName)) {
+            // Delete session branch (it should now be in a PR)
+            this.options.logger.info(`🗑️  Deleting session branch: ${this.sessionBranch.branchName}`);
+            await this.git.deleteLocalBranch(this.sessionBranch.branchName, true);
+            this.options.logger.info('✅ Session branch deleted successfully');
+          }
+
+          // Clear session branch tracking
+          this.sessionBranch = null;
+        } else {
+          this.options.logger.info('🧹 No session branch to clean up');
+        }
+      }
 
       // Handle legacy session branches if any exist
       if (this.sessionBranches.length > 0) {
@@ -797,7 +1076,7 @@ All successful tasks merged to main
         this.sessionBranches = [];
       }
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to cleanup session branch: ${error.message}`);
+      this.options.logger.warn(`⚠️  Failed to cleanup branches: ${error.message}`);
     }
   }
 

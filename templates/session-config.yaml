@@ -54,6 +54,11 @@ git:
   # Path to pull request template file (optional)
   pr_template: ""
   
+  # PR creation strategy
+  # Options: "task" (one PR per task), "session" (one PR for all tasks)
+  # Default: "task"
+  pr_strategy: "task"
+  
   # Clean up branches after session completion
   cleanup_branches: false
 

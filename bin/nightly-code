@@ -111,9 +111,20 @@ program
   .option('--dry-run', 'Validate configuration without executing')
   .option('--resume <checkpoint>', 'Resume from checkpoint')
   .option('--superclaude', 'Enable SuperClaude prompt optimization (overrides config)')
+  .option('--session-pr', 'Use session-based PR strategy (one PR for all tasks)')
+  .option('--task-pr', 'Use task-based PR strategy (one PR per task) - default')
   .action(async (options) => {
     try {
       console.log(chalk.blue('🎯 Starting coding session...'));
+
+      // Determine PR strategy from CLI flags
+      let prStrategy = undefined;
+      if (options.sessionPr) {
+        prStrategy = 'session';
+      } else if (options.taskPr) {
+        prStrategy = 'task';
+      }
+      // If neither flag is specified, will default to config or 'task'
 
       const orchestrator = new Orchestrator({
         configPath: options.config,
@@ -121,7 +132,8 @@ program
         maxDuration: parseInt(options.maxDuration) * 60, // Convert to seconds
         dryRun: options.dryRun,
         resumeCheckpoint: options.resume,
-        forceSuperclaude: options.superclaude // CLI flag overrides config
+        forceSuperclaude: options.superclaude, // CLI flag overrides config
+        prStrategy // Pass PR strategy if specified
       });
 
       const result = await orchestrator.run();

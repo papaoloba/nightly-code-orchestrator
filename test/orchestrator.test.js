@@ -43,7 +43,12 @@ describe('Orchestrator', () => {
       commitTask: jest.fn(),
       revertTaskChanges: jest.fn(),
       getChangedFiles: jest.fn(),
-      createSessionSummaryCommit: jest.fn()
+      createSessionSummaryCommit: jest.fn(),
+      createSessionBranch: jest.fn(),
+      createTaskPR: jest.fn().mockResolvedValue('https://github.com/test/repo/pull/123'),
+      createSessionPR: jest.fn().mockResolvedValue('https://github.com/test/repo/pull/456'),
+      cleanupSessionBranches: jest.fn(),
+      options: { prStrategy: 'task' }
     };
     mockValidator = {
       validateAll: jest.fn(),
@@ -514,6 +519,92 @@ describe('Orchestrator', () => {
       await orchestrator.executeClaudeCode('test prompt');
 
       expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PR Strategy', () => {
+    beforeEach(() => {
+      orchestrator.state.completedTasks = [];
+      orchestrator.config = { data: { git: { create_pr: true } } };
+    });
+
+    it('should create individual task PRs when using task strategy', async () => {
+      mockGitManager.options.prStrategy = 'task';
+      
+      const mockTask = {
+        id: 'task-001',
+        title: 'Test Task',
+        type: 'feature'
+      };
+      
+      const mockResult = {
+        success: true,
+        filesChanged: ['src/test.js'],
+        duration: 5000
+      };
+
+      // Mock task execution
+      orchestrator.executeTask = jest.fn().mockResolvedValue(mockResult);
+      orchestrator.validateTaskCompletion = jest.fn().mockResolvedValue({ passed: true });
+      mockGitManager.createTaskBranch.mockResolvedValue('nightly-feature-task-001');
+
+      const tasks = [mockTask];
+      await orchestrator.executeTasks(tasks);
+
+      expect(mockGitManager.createTaskPR).toHaveBeenCalledWith(mockTask, mockResult);
+      expect(orchestrator.state.completedTasks[0].prUrl).toBe('https://github.com/test/repo/pull/123');
+    });
+
+    it('should create session PR when using session strategy', async () => {
+      mockGitManager.options.prStrategy = 'session';
+      orchestrator.options.dryRun = false;
+      
+      const results = {
+        completed: 2,
+        failed: 0
+      };
+
+      orchestrator.state.completedTasks = [
+        { task: { id: 'task-001', title: 'Task 1' }, result: { filesChanged: ['file1.js'] } },
+        { task: { id: 'task-002', title: 'Task 2' }, result: { filesChanged: ['file2.js'] } }
+      ];
+
+      await orchestrator.finalize(results);
+
+      expect(mockGitManager.createSessionPR).toHaveBeenCalled();
+      expect(mockGitManager.createTaskPR).not.toHaveBeenCalled();
+    });
+
+    it('should not create session branch when using task PR strategy', async () => {
+      mockGitManager.options.prStrategy = 'task';
+      orchestrator.options.dryRun = false;
+
+      await orchestrator.startSession();
+
+      expect(mockGitManager.createSessionBranch).not.toHaveBeenCalled();
+    });
+
+    it('should create session branch when using session PR strategy', async () => {
+      mockGitManager.options.prStrategy = 'session';
+      orchestrator.options.dryRun = false;
+
+      await orchestrator.startSession();
+
+      expect(mockGitManager.createSessionBranch).toHaveBeenCalledWith(orchestrator.state.sessionId);
+    });
+
+    it('should clean up task branches when using task strategy', async () => {
+      mockGitManager.options.prStrategy = 'task';
+      orchestrator.options.dryRun = false;
+      
+      const results = {
+        completed: 1,
+        failed: 0
+      };
+
+      await orchestrator.finalize(results);
+
+      expect(mockGitManager.cleanupSessionBranches).toHaveBeenCalled();
     });
   });
 });

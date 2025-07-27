@@ -104,6 +104,12 @@
           "default": "",
           "description": "Path to pull request template file"
         },
+        "pr_strategy": {
+          "type": "string",
+          "enum": ["task", "session"],
+          "default": "task",
+          "description": "PR creation strategy: 'task' for one PR per task, 'session' for one PR per session"
+        },
         "cleanup_branches": {
           "type": "boolean",
           "default": false,

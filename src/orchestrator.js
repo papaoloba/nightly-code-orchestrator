@@ -228,11 +228,8 @@ class Orchestrator extends EventEmitter {
       logger: this.logger
     });
 
-    this.gitManager = new GitManager({
-      workingDir: this.options.workingDir,
-      logger: this.logger,
-      dryRun: this.options.dryRun
-    });
+    // GitManager will be initialized after config is loaded to get PR strategy
+    this.gitManager = null;
 
     this.validator = new Validator({
       configPath: this.options.configPath,
@@ -261,7 +258,19 @@ class Orchestrator extends EventEmitter {
       this.state.startTime = Date.now();
 
       // Load configuration file
-      await this.loadConfigurationFile();
+      const fullConfig = await this.loadConfigurationFile();
+
+      // Initialize GitManager with configuration
+      this.gitManager = new GitManager({
+        workingDir: this.options.workingDir,
+        logger: this.logger,
+        dryRun: this.options.dryRun,
+        branchPrefix: fullConfig?.git?.branch_prefix || 'nightly-',
+        autoPush: fullConfig?.git?.auto_push !== false,
+        createPR: fullConfig?.git?.create_pr !== false,
+        prTemplate: fullConfig?.git?.pr_template || null,
+        prStrategy: this.options.prStrategy || fullConfig?.git?.pr_strategy || 'task' // Default to task-based PRs
+      });
 
       // Initialize SuperClaude integration if enabled
       await this.initializeSuperClaude();
@@ -327,14 +336,21 @@ class Orchestrator extends EventEmitter {
       this.logger.info(`💾 Disk space: ${freeSpaceGB}GB available`);
     }
 
+    // Validate GitManager is initialized
+    if (!this.gitManager) {
+      throw new Error('GitManager not initialized. Configuration loading may have failed.');
+    }
+
     // Initialize git if needed
     await this.gitManager.ensureRepository();
 
-    // Create session branch for this coding session (skip in dry-run mode)
-    if (!this.options.dryRun) {
+    // Create session branch only if using session PR strategy
+    if (!this.options.dryRun && this.gitManager.options.prStrategy === 'session') {
       await this.gitManager.createSessionBranch(this.state.sessionId);
+    } else if (!this.options.dryRun && this.gitManager.options.prStrategy === 'task') {
+      this.logger.info('🌿 Task-based PR strategy - branches will be created per task');
     } else {
-      this.logger.info('🔄 Dry run mode - skipping session branch creation');
+      this.logger.info('🔄 Dry run mode - skipping branch creation');
     }
 
     this.logWithTiming('info', '✅ Environment validation completed', 'environment-validation');
@@ -406,7 +422,7 @@ class Orchestrator extends EventEmitter {
         this.logger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
         this.logger.info(`🆔 ID: ${task.id}`);
 
-        // Ensure we're on the session branch (task branch creation is now handled differently)
+        // Create task branch if using task-based PR strategy
         if (!this.options.dryRun) {
           const branchName = await this.gitManager.createTaskBranch(task);
         }
@@ -419,18 +435,35 @@ class Orchestrator extends EventEmitter {
           const validation = await this.validateTaskCompletion(task, taskResult);
 
           if (validation.passed) {
-            // Commit changes to session branch (skip in dry-run mode)
+            // Commit changes to task branch (skip in dry-run mode)
             if (!this.options.dryRun) {
               await this.gitManager.commitTask(task, taskResult);
+              
+              // Create individual PR if using task-based strategy
+              if (this.gitManager.options.prStrategy === 'task') {
+                try {
+                  const prUrl = await this.gitManager.createTaskPR(task, taskResult);
+                  if (prUrl) {
+                    task.prUrl = prUrl;
+                    this.logger.info(`🎯 Task PR created: ${prUrl}`);
+                  } else {
+                    this.logger.warn(`⚠️  PR creation skipped for task ${task.id}`);
+                  }
+                } catch (error) {
+                  this.logger.error(`❌ Failed to create PR for task ${task.id}: ${error.message}`);
+                  // Continue execution, PR creation is not critical for task completion
+                }
+              }
             } else {
-              this.logger.info('🔄 Dry run mode - skipping task commit');
+              this.logger.info('🔄 Dry run mode - skipping task commit and PR creation');
             }
 
             this.state.completedTasks.push({
               task,
               result: taskResult,
               validation,
-              completedAt: Date.now()
+              completedAt: Date.now(),
+              prUrl: task.prUrl
             });
 
             results.completed++;
@@ -1289,32 +1322,45 @@ Please implement this task now.`;
       this.state.claudeProcess.kill('SIGTERM');
     }
 
-    // Create session pull request (skip in dry-run mode)
+    // Create pull requests based on strategy
     if (results.completed > 0 && !this.options.dryRun) {
-      this.logger.info('🔄 Creating session pull request...');
-      const sessionData = {
-        sessionId: this.state.sessionId,
-        completedTasks: results.completed,
-        totalTasks: results.completed + results.failed,
-        duration: this.state.endTime - this.state.startTime,
-        tasks: this.state.completedTasks.map(ct => ({
-          ...ct.task,
-          status: 'completed',
-          result: ct.result
-        })),
-        failedTasks: this.state.failedTasks.map(ft => ({
-          ...ft.task,
-          status: 'failed',
-          error: ft.error
-        }))
-      };
+      if (this.gitManager.options.prStrategy === 'session') {
+        // Legacy behavior: create single session PR
+        this.logger.info('🔄 Creating session pull request...');
+        const sessionData = {
+          sessionId: this.state.sessionId,
+          completedTasks: results.completed,
+          totalTasks: results.completed + results.failed,
+          duration: this.state.endTime - this.state.startTime,
+          tasks: this.state.completedTasks.map(ct => ({
+            ...ct.task,
+            status: 'completed',
+            result: ct.result
+          })),
+          failedTasks: this.state.failedTasks.map(ft => ({
+            ...ft.task,
+            status: 'failed',
+            error: ft.error
+          }))
+        };
 
-      const prUrl = await this.gitManager.createSessionPR(sessionData);
-      if (prUrl) {
-        this.logger.info(`✅ Session PR created: ${prUrl}`);
+        const prUrl = await this.gitManager.createSessionPR(sessionData);
+        if (prUrl) {
+          this.logger.info(`✅ Session PR created: ${prUrl}`);
+        }
+      } else {
+        // Task-based PRs are created immediately after each task
+        this.logger.info('✅ Individual task PRs have been created');
+        const taskPRs = this.state.completedTasks
+          .filter(ct => ct.prUrl)
+          .map(ct => `  - ${ct.task.title}: ${ct.prUrl}`);
+        if (taskPRs.length > 0) {
+          this.logger.info('📋 Task PRs:');
+          taskPRs.forEach(pr => this.logger.info(pr));
+        }
       }
     } else if (results.completed > 0 && this.options.dryRun) {
-      this.logger.info('🔄 Dry run mode - skipping session pull request creation');
+      this.logger.info('🔄 Dry run mode - skipping pull request creation');
     }
 
     // Clean up any remaining task branches (failed tasks) (skip in dry-run mode)
