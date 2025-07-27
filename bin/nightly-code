@@ -129,7 +129,7 @@ program
       if (result.success) {
         console.log(chalk.green('✅ Session completed successfully!'));
         console.log(chalk.blue(`📊 Completed ${result.completedTasks}/${result.totalTasks} tasks`));
-        console.log(chalk.blue(`⏱️  Duration: ${Math.round(result.duration / 60)} minutes`));
+        console.log(chalk.blue(`⏱️  Duration: ${Math.round(result.duration / 60000)} minutes`));
       } else {
         console.log(chalk.yellow('⚠️  Session completed with issues'));
         console.log(chalk.red(`❌ Errors: ${result.errors.length}`));
