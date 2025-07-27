@@ -896,8 +896,9 @@ class Orchestrator extends EventEmitter {
 
     // Add stricter instructions on retry to ensure /sc: prefix
     if (retryCount > 0) {
-      optimizationPrompt += '\n\nIMPORTANT: The output MUST be a single line starting with "/sc:" ' +
-        'followed by the command and all its arguments. No other text or explanation.';
+      optimizationPrompt += '\n\nIMPORTANT: The output MUST be in the format /sc:COMMAND where COMMAND ' +
+        'is the SuperClaude command WITHOUT a leading slash (e.g., /sc:analyze not /sc: /analyze). ' +
+        'No spaces after the colon. No other text or explanation.';
     }
 
     try {
@@ -918,6 +919,13 @@ class Orchestrator extends EventEmitter {
 
       // Check if it's a valid command
       if (optimizedCommand && optimizedCommand.startsWith('/')) {
+        // Check if output has incorrect format with space after colon (e.g., "/sc: /document")
+        if (optimizedCommand.startsWith('/sc: ')) {
+          this.logger.warn(`⚠️  Incorrect format detected (space after colon): ${optimizedCommand}`);
+          this.logger.info('🔄 Retrying to ensure correct /sc:command format...');
+          return this.optimizePromptWithSuperClaude(originalPrompt, retryCount + 1);
+        }
+        
         // Check if output starts with /sc: - if not, retry with stricter instructions
         if (!optimizedCommand.startsWith('/sc:') && retryCount === 0) {
           this.logger.warn(`⚠️  Output doesn't start with /sc: pattern: ${optimizedCommand}`);

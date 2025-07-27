@@ -398,6 +398,20 @@ Never sacrifice specificity for syntax compliance - preserve what matters to ach
 
 Transform this prompt: "{PROMPT}"
 
-CRITICAL INSTRUCTION: Preserve ALL specific details, technologies, metrics, and requirements from the original prompt in your optimized command. Return ONLY the optimized command starting with /sc:, nothing else. The output MUST be a single line starting with "/sc:" followed by the command and all its arguments.`;
+## Output Format Examples
+
+CORRECT formats:
+- /sc:analyze @src/ --think
+- /sc:build "component" --magic
+- /sc:document @api/ --persona-scribe=en
+- /sc:implement "feature" --validate
+
+INCORRECT formats:
+- /sc: /analyze @src/ --think  (extra space and slash)
+- /sc: document @api/  (space after colon)
+- /analyze @src/ --think  (missing /sc: prefix)
+- sc:analyze @src/  (missing leading slash)
+
+CRITICAL INSTRUCTION: Preserve ALL specific details, technologies, metrics, and requirements from the original prompt in your optimized command. Return ONLY the optimized command in the format /sc:COMMAND where COMMAND is the SuperClaude command WITHOUT a leading slash. The output MUST be a single line with NO space after the colon.`;
 
 module.exports = { SUPERCLAUDE_OPTIMIZATION_GUIDE };

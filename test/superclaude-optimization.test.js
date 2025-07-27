@@ -26,9 +26,9 @@ describe('SuperClaude Prompt Optimization', () => {
       orchestrator.superclaudeConfig = { enabled: true };
       orchestrator.superclaudeIntegration = { isEnabled: () => true };
 
-      // Mock executeClaudeCodeSingle to return optimized command
+      // Mock executeClaudeCodeSingle to return optimized command with /sc: prefix
       orchestrator.executeClaudeCodeSingle = jest.fn().mockResolvedValue({
-        stdout: '/improve @src/ --focus quality --validate',
+        stdout: '/sc:improve @src/ --focus quality --validate',
         stderr: '',
         code: 0
       });
@@ -36,7 +36,7 @@ describe('SuperClaude Prompt Optimization', () => {
       const originalPrompt = 'Make the code better';
       const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
 
-      expect(result).toBe('/improve @src/ --focus quality --validate');
+      expect(result).toBe('/sc:improve @src/ --focus quality --validate');
       expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledWith(
         expect.stringContaining('Transform this prompt:'),
         expect.objectContaining({
@@ -108,6 +108,28 @@ describe('SuperClaude Prompt Optimization', () => {
       expect(result).toBe('/sc:build "GraphQL API" --rate-limit 1000 --think');
       expect(orchestrator.logger.info).toHaveBeenCalledWith(
         expect.stringContaining('✅ Prompt optimized to:')
+      );
+    });
+
+    it('should reject optimization with incorrect /sc: format (space after colon)', async () => {
+      // Mock logger
+      orchestrator.logger.warn = jest.fn();
+      orchestrator.logger.info = jest.fn();
+      
+      // Mock executeClaudeCodeSingle to return incorrect format with space
+      orchestrator.executeClaudeCodeSingle = jest.fn()
+        .mockResolvedValueOnce({ stdout: '/sc: /document @api/' }) // Wrong format
+        .mockResolvedValueOnce({ stdout: '/sc:document @api/' }); // Correct format
+
+      const originalPrompt = 'document the API';
+      const result = await orchestrator.optimizePromptWithSuperClaude(originalPrompt);
+
+      expect(orchestrator.executeClaudeCodeSingle).toHaveBeenCalledTimes(2);
+      expect(result).toBe('/sc:document @api/');
+      
+      // Verify warning was logged for first attempt
+      expect(orchestrator.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Incorrect format detected (space after colon)")
       );
     });
   });
