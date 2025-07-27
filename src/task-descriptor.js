@@ -12,6 +12,13 @@ class TaskDescriptor {
       security: { priority: 9, duration: 120 }
     };
 
+    // Thresholds for automatic task splitting
+    this.splitThresholds = {
+      maxLength: 500, // characters
+      maxComplexity: 8, // complexity score
+      maxDuration: 300 // minutes
+    };
+
     this.priorityKeywords = {
       critical: 9,
       urgent: 9,
@@ -35,11 +42,27 @@ class TaskDescriptor {
   }
 
   /**
-   * Parse natural language description into structured task
+   * Parse natural language description into structured task(s) with automatic splitting
+   * @param {string} description - Natural language task description
+   * @returns {Array|Object} Array of tasks if split, single task object otherwise
+   */
+  parseDescription (description) {
+    // Check if description should be split into multiple tasks
+    const shouldSplit = this.shouldSplitTask(description);
+
+    if (shouldSplit) {
+      return this.splitTaskDescription(description);
+    }
+
+    return this.parseSingleDescription(description);
+  }
+
+  /**
+   * Parse a single task description
    * @param {string} description - Natural language task description
    * @returns {Object} Structured task object
    */
-  parseDescription (description) {
+  parseSingleDescription (description) {
     const lowerDesc = description.toLowerCase();
 
     // Detect task type
@@ -64,7 +87,7 @@ class TaskDescriptor {
     const filesToModify = this.extractFilePaths(description);
 
     return {
-      id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: this.generateMeaningfulTaskId(title, taskType),
       type: taskType,
       priority,
       title,
@@ -267,20 +290,282 @@ class TaskDescriptor {
   }
 
   /**
+   * Generate meaningful task ID based on title and type
+   * @param {string} title - Task title
+   * @param {string} type - Task type
+   * @returns {string} Meaningful task ID
+   */
+  generateMeaningfulTaskId (title, type) {
+    // Extract key words from title
+    const titleWords = title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+      .split(/\s+/)
+      .filter(word => word.length > 2) // Filter short words
+      .slice(0, 3); // Take first 3 meaningful words
+
+    const titlePart = titleWords.join('-') || 'task';
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits
+
+    return `${type}-${titlePart}-${timestamp}`;
+  }
+
+  /**
+   * Check if a task description should be split into multiple tasks
+   * @param {string} description - Task description
+   * @returns {boolean} Whether to split the task
+   */
+  shouldSplitTask (description) {
+    // Check length threshold
+    if (description.length > this.splitThresholds.maxLength) {
+      return true;
+    }
+
+    // Check for multiple distinct tasks (bullet points, numbered lists)
+    const bulletPoints = (description.match(/^\s*[-*•]\s/gm) || []).length;
+    const numberedItems = (description.match(/^\s*\d+[.)]/gm) || []).length;
+    const distinctTasks = Math.max(bulletPoints, numberedItems);
+
+    if (distinctTasks > 3) {
+      return true;
+    }
+
+    // Check for multiple domains/areas
+    const domainCount = Object.keys(this.tags).filter(domain =>
+      this.tags[domain].some(keyword => description.toLowerCase().includes(keyword))
+    ).length;
+
+    if (domainCount > 2) {
+      return true;
+    }
+
+    // Check complexity indicators
+    const complexityScore = this.calculateComplexityScore(description);
+    if (complexityScore > this.splitThresholds.maxComplexity) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Calculate complexity score for a task description
+   * @param {string} description - Task description
+   * @returns {number} Complexity score (0-10)
+   */
+  calculateComplexityScore (description) {
+    let score = 0;
+    const lowerDesc = description.toLowerCase();
+
+    // Length factor
+    score += Math.min(description.length / 100, 3);
+
+    // Complexity keywords
+    const complexityKeywords = [
+      'complex', 'comprehensive', 'integrate', 'refactor', 'migrate',
+      'architecture', 'system', 'multiple', 'advanced', 'sophisticated'
+    ];
+    score += complexityKeywords.filter(keyword => lowerDesc.includes(keyword)).length;
+
+    // Technology count
+    const technologies = [
+      'react', 'vue', 'angular', 'node', 'express', 'database', 'api',
+      'authentication', 'testing', 'deployment', 'docker', 'kubernetes'
+    ];
+    score += technologies.filter(tech => lowerDesc.includes(tech)).length * 0.5;
+
+    // Action verbs count
+    const actionVerbs = [
+      'implement', 'create', 'build', 'develop', 'design', 'integrate',
+      'optimize', 'refactor', 'test', 'deploy', 'configure', 'setup'
+    ];
+    score += actionVerbs.filter(verb => lowerDesc.includes(verb)).length * 0.3;
+
+    return Math.min(score, 10);
+  }
+
+  /**
+   * Split a complex task description into multiple tasks
+   * @param {string} description - Complex task description
+   * @returns {Array} Array of task objects
+   */
+  splitTaskDescription (description) {
+
+    // Strategy 1: Split by bullet points or numbered lists
+    const bulletTasks = this.splitByBulletPoints(description);
+    if (bulletTasks.length > 1) {
+      return bulletTasks;
+    }
+
+    // Strategy 2: Split by sentences with action verbs
+    const sentenceTasks = this.splitBySentences(description);
+    if (sentenceTasks.length > 1) {
+      return sentenceTasks;
+    }
+
+    // Strategy 3: Split by domain/technology areas
+    const domainTasks = this.splitByDomains(description);
+    if (domainTasks.length > 1) {
+      return domainTasks;
+    }
+
+    // Fallback: Create phases for large tasks
+    return this.createPhases(description);
+  }
+
+  /**
+   * Split description by bullet points or numbered lists
+   * @param {string} description - Task description
+   * @returns {Array} Array of task objects
+   */
+  splitByBulletPoints (description) {
+    const lines = description.split('\n');
+    const tasks = [];
+    let currentTask = '';
+    let mainDescription = '';
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+
+      // Check if line is a bullet point or numbered item
+      if (trimmedLine.match(/^[-*•]\s/) || trimmedLine.match(/^\d+[.)]\s/)) {
+        // Save previous task if exists
+        if (currentTask.trim()) {
+          tasks.push(this.parseSingleDescription(`${mainDescription}\n${currentTask}`));
+        }
+
+        // Start new task
+        currentTask = trimmedLine.replace(/^[-*•]\s/, '').replace(/^\d+[.)]\s/, '');
+      } else if (currentTask) {
+        // Continue current task
+        currentTask += `\n${trimmedLine}`;
+      } else {
+        // Part of main description
+        mainDescription += `\n${trimmedLine}`;
+      }
+    }
+
+    // Add last task
+    if (currentTask.trim()) {
+      tasks.push(this.parseSingleDescription(`${mainDescription}\n${currentTask}`));
+    }
+
+    return tasks.length > 1 ? tasks : [];
+  }
+
+  /**
+   * Split description by sentences with action verbs
+   * @param {string} description - Task description
+   * @returns {Array} Array of task objects
+   */
+  splitBySentences (description) {
+    const sentences = description.split(/[.!?]/).map(s => s.trim()).filter(s => s);
+    const actionVerbs = [
+      'implement', 'create', 'build', 'develop', 'design', 'add',
+      'update', 'fix', 'refactor', 'test', 'deploy', 'configure'
+    ];
+
+    const actionSentences = sentences.filter(sentence =>
+      actionVerbs.some(verb => sentence.toLowerCase().includes(verb))
+    );
+
+    if (actionSentences.length > 2) {
+      return actionSentences.map(sentence => this.parseSingleDescription(sentence));
+    }
+
+    return [];
+  }
+
+  /**
+   * Split description by different technology domains
+   * @param {string} description - Task description
+   * @returns {Array} Array of task objects
+   */
+  splitByDomains (description) {
+    const domainSections = {};
+    const lowerDesc = description.toLowerCase();
+
+    // Group content by domains
+    for (const [domain, keywords] of Object.entries(this.tags)) {
+      const matchingKeywords = keywords.filter(keyword => lowerDesc.includes(keyword));
+      if (matchingKeywords.length > 0) {
+        domainSections[domain] = {
+          keywords: matchingKeywords,
+          content: description // For now, use full description
+        };
+      }
+    }
+
+    // If multiple domains found, create separate tasks
+    const domains = Object.keys(domainSections);
+    if (domains.length > 2) {
+      return domains.map(domain => {
+        const domainContent = `${domain.charAt(0).toUpperCase() + domain.slice(1)} work: ${description}`;
+        return this.parseSingleDescription(domainContent);
+      });
+    }
+
+    return [];
+  }
+
+  /**
+   * Create phases for large tasks
+   * @param {string} description - Task description
+   * @returns {Array} Array of task objects representing phases
+   */
+  createPhases (description) {
+    const phases = [
+      'Planning and Analysis',
+      'Implementation',
+      'Testing and Validation',
+      'Documentation and Cleanup'
+    ];
+
+    return phases.map((phase, index) => {
+      const phaseDescription = `${phase}: ${description}`;
+      const task = this.parseSingleDescription(phaseDescription);
+      task.title = `${phase} - ${task.title}`;
+      task.dependencies = index > 0 ? [phases[index - 1].toLowerCase().replace(/\s+/g, '-')] : [];
+      return task;
+    });
+  }
+
+  /**
    * Convert multiple descriptions to optimized nightly-tasks.yaml
    * @param {Array<string>} descriptions - Array of task descriptions
    * @returns {string} YAML content
    */
   generateTasksYaml (descriptions) {
-    const tasks = descriptions.map(desc => this.parseDescription(desc));
+    let allTasks = [];
 
-    // Sort by priority
-    tasks.sort((a, b) => b.priority - a.priority);
+    // Process each description, handling potential task splitting
+    for (const desc of descriptions) {
+      const result = this.parseDescription(desc);
+      if (Array.isArray(result)) {
+        allTasks = allTasks.concat(result);
+      } else {
+        allTasks.push(result);
+      }
+    }
+
+    // Sort by priority, then by dependencies
+    allTasks.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return b.priority - a.priority;
+      }
+      // Tasks with no dependencies come first
+      return a.dependencies.length - b.dependencies.length;
+    });
 
     const yamlContent = {
       version: '1.0',
       created_at: new Date().toISOString(),
-      tasks
+      tasks: allTasks,
+      metadata: {
+        total_tasks: allTasks.length,
+        estimated_total_duration: allTasks.reduce((sum, task) => sum + task.estimated_duration, 0),
+        auto_split_applied: allTasks.some(task => task.title.includes(' - ') || task.dependencies.length > 0)
+      }
     };
 
     return yaml.stringify(yamlContent, {
@@ -297,7 +582,7 @@ class TaskDescriptor {
   optimizeTask (task) {
     // Ensure all required fields
     const optimized = {
-      id: task.id || `task-${Date.now()}`,
+      id: task.id || this.generateMeaningfulTaskId(task.title || 'Untitled', task.type || 'feature'),
       type: task.type || 'feature',
       priority: Math.min(Math.max(task.priority || 5, 1), 10),
       title: task.title || 'Untitled Task',

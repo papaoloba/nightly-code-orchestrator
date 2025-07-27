@@ -326,7 +326,7 @@ program
       ));
 
       const taskDescriptor = new TaskDescriptor();
-      const inquirer = require('inquirer');
+      const { input, editor, confirm } = require('@inquirer/prompts');
       let descriptions = [];
 
       if (options.file) {
@@ -340,14 +340,31 @@ program
 
         let done = false;
         while (!done) {
-          const { description } = await inquirer.prompt([
-            {
-              name: 'description',
-              type: 'editor',
+          let description;
+
+          try {
+            description = await editor({
               message: 'Describe the task (press Enter to open editor):',
-              validate: input => input.trim() !== '' || 'Description cannot be empty'
-            }
-          ]);
+              validate: (input) => {
+                if (!input || input.trim() === '') {
+                  return 'Description cannot be empty';
+                }
+                return true;
+              }
+            });
+          } catch (error) {
+            // Fallback to simple input if editor fails
+            console.log(chalk.yellow('Editor not available, using simple input mode'));
+            description = await input({
+              message: 'Describe the task:',
+              validate: (input) => {
+                if (!input || input.trim() === '') {
+                  return 'Description cannot be empty';
+                }
+                return true;
+              }
+            });
+          }
 
           if (description.toLowerCase().trim() === 'done') {
             done = true;
@@ -355,14 +372,10 @@ program
             descriptions.push(description);
             console.log(chalk.green(`✅ Task ${descriptions.length} added`));
 
-            const { continue: shouldContinue } = await inquirer.prompt([
-              {
-                name: 'continue',
-                type: 'confirm',
-                message: 'Add another task?',
-                default: true
-              }
-            ]);
+            const shouldContinue = await confirm({
+              message: 'Add another task?',
+              default: true
+            });
 
             if (!shouldContinue) done = true;
           }
@@ -386,8 +399,12 @@ program
         process.exit(1);
       }
 
-      // Process descriptions
-      console.log(chalk.blue(`\n🤖 Processing ${descriptions.length} task description(s)...`));
+      // Process descriptions with automatic splitting
+      console.log(chalk.blue(`\n🤖 Processing ${descriptions.length} task description(s) with auto-splitting...`));
+
+      // Track splitting results
+      let totalTasks = 0;
+      let splitCount = 0;
 
       let yamlContent;
 
@@ -397,11 +414,20 @@ program
         const YAML = require('yaml');
         const existing = YAML.parse(existingContent);
 
-        // Add new tasks
-        const newTasks = descriptions.map(desc => {
-          const task = taskDescriptor.parseDescription(desc);
-          return taskDescriptor.optimizeTask(task);
+        // Add new tasks with automatic splitting
+        const newTasks = [];
+        descriptions.forEach(desc => {
+          const result = taskDescriptor.parseDescription(desc);
+          if (Array.isArray(result)) {
+            // Task was split
+            splitCount++;
+            result.forEach(task => newTasks.push(taskDescriptor.optimizeTask(task)));
+          } else {
+            // Single task
+            newTasks.push(taskDescriptor.optimizeTask(result));
+          }
         });
+        totalTasks = newTasks.length;
 
         existing.tasks = existing.tasks.concat(newTasks);
 
@@ -413,14 +439,24 @@ program
           lineWidth: 0
         });
       } else {
-        // Generate new file
+        // Generate new file with splitting tracking
         yamlContent = taskDescriptor.generateTasksYaml(descriptions);
+        const YAML = require('yaml');
+        const parsedContent = YAML.parse(yamlContent);
+        totalTasks = parsedContent.tasks.length;
+        splitCount = parsedContent.metadata?.auto_split_applied ? 1 : 0;
       }
-
 
       // Write output
       await fs.writeFile(options.output, yamlContent);
       console.log(chalk.green(`\n✅ Tasks written to ${options.output}`));
+
+      // Show splitting summary
+      if (splitCount > 0) {
+        console.log(chalk.cyan(
+          `🔄 Auto-split applied: ${splitCount} complex descriptions split into ${totalTasks} tasks`
+        ));
+      }
 
       // Show summary
       const YAML = require('yaml');
@@ -447,6 +483,14 @@ program
         `Total estimated duration: ${Math.round(totalDuration / 60)} hours ${totalDuration % 60} minutes`
       ));
 
+      // Show task IDs for reference
+      console.log(chalk.gray('\nTask IDs for reference:'));
+      tasks.slice(0, 5).forEach(task => {
+        console.log(chalk.gray(`  ${task.id}`));
+      });
+      if (tasks.length > 5) {
+        console.log(chalk.gray(`  ... and ${tasks.length - 5} more`));
+      }
     } catch (error) {
       console.error(chalk.red('❌ Task description failed:'), error.message);
       process.exit(1);

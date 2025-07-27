@@ -650,10 +650,10 @@ class Orchestrator extends EventEmitter {
     try {
       // Create an automatic improvement task
       const improvementTask = await this.createAutomaticImprovementTask(remainingTime);
-      
+
       if (improvementTask) {
         this.state.currentTask = improvementTask;
-        
+
         this.prettyLogger.box([
           '✨ Automatic Code Improvement Session',
           `⏱️  Available time: ${Math.round(remainingTime / 60)} minutes`,
@@ -667,11 +667,11 @@ class Orchestrator extends EventEmitter {
 
         // Execute the improvement task
         const improvementResult = await this.executeAutomaticImprovementTask(improvementTask);
-        
+
         if (improvementResult.success) {
           // Validate and commit the improvements
           const validation = await this.validateTaskCompletion(improvementTask, improvementResult);
-          
+
           if (validation.passed) {
             if (!this.options.dryRun) {
               await this.gitManager.commitTask(improvementTask, improvementResult);
@@ -679,7 +679,7 @@ class Orchestrator extends EventEmitter {
             } else {
               this.logger.info('🔄 Dry run mode - skipping automatic improvement commit');
             }
-            
+
             // Update results
             results.completed++;
             this.state.completedTasks.push({
@@ -689,7 +689,7 @@ class Orchestrator extends EventEmitter {
               completedAt: Date.now(),
               automatic: true
             });
-            
+
             this.logger.info('🎉 Automatic improvement session completed successfully!');
           } else {
             this.logger.warn('⚠️  Automatic improvement validation failed, reverting changes');
@@ -700,7 +700,7 @@ class Orchestrator extends EventEmitter {
         } else {
           this.logger.warn('⚠️  Automatic improvement execution failed');
         }
-        
+
         this.state.currentTask = null;
       }
     } catch (error) {
@@ -718,7 +718,7 @@ class Orchestrator extends EventEmitter {
    */
   async createAutomaticImprovementTask (remainingTime) {
     const improvementDuration = Math.min(remainingTime - 60, 3600); // Leave 1 minute buffer, max 1 hour
-    
+
     return {
       id: `auto-improve-${Date.now()}`,
       type: 'improvement',
@@ -762,11 +762,11 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
    */
   async executeAutomaticImprovementTask (task) {
     let prompt;
-    
+
     // Use SuperClaude improve command if available
     if (this.superclaudeConfig?.enabled && this.superclaudeIntegration?.isEnabled()) {
       this.logger.info('🧠 Using SuperClaude /sc:improve command for automatic improvements');
-      prompt = `/sc:improve --scope project --focus quality --iterative --validate`;
+      prompt = '/sc:improve --scope project --focus quality --iterative --validate';
     } else {
       // Fallback to standard improvement prompt
       this.logger.info('🤖 Using standard improvement approach');
@@ -774,10 +774,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     }
 
     const timeoutMs = task.estimated_duration * 60 * TIME.MS.ONE_SECOND;
-    
+
     try {
       const startTime = Date.now();
-      
+
       if (this.options.dryRun) {
         this.logger.info('🔄 Dry run mode - skipping actual automatic improvement execution');
         return {
