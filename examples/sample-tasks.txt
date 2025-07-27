@@ -1,0 +1,55 @@
+Implement a comprehensive user authentication system with the following features:
+- User registration with email and password
+- Email verification for new accounts
+- Secure login with JWT token generation
+- Password reset functionality with email confirmation
+- Protected routes middleware for API endpoints
+- User profile management (update email, password, profile info)
+- Session management with token refresh
+- Account deactivation and reactivation
+
+The system should follow security best practices including:
+- Password hashing with bcrypt
+- Secure token generation and storage
+- Rate limiting on authentication endpoints
+- Input validation and sanitization
+- OWASP compliance
+
+Fix the critical memory leak in the data processing module that causes the application to crash after 8-12 hours of operation. The issue appears to be related to event listeners not being properly cleaned up in the stream processing pipeline. This is affecting production systems and needs urgent attention.
+
+Add comprehensive integration tests for the REST API to improve code quality and prevent regressions. The tests should cover:
+- All API endpoints with various HTTP methods
+- Authentication and authorization flows
+- Error scenarios and edge cases
+- Database transaction handling
+- External service integration mocking
+- Performance benchmarks for critical endpoints
+
+Tests should be written using Jest and should run in the CI/CD pipeline.
+
+Refactor the API route handlers to improve maintainability and code organization. Current issues include:
+- Route files exceeding 500 lines
+- Mixed business logic and HTTP handling
+- Duplicated validation logic
+- Inconsistent error handling
+- Poor test coverage
+
+The refactoring should follow clean architecture principles with clear separation of concerns.
+
+Create comprehensive API documentation using OpenAPI 3.0 specification. The documentation should include:
+- All REST endpoints with request/response examples
+- Authentication methods and requirements
+- Error response formats and status codes
+- Rate limiting information
+- WebSocket API documentation
+- SDK examples in multiple languages
+- Interactive Swagger UI
+- Postman collection export
+
+Optimize the database query performance in the reporting module. Current reports take 30+ seconds to generate for large datasets. Goals:
+- Reduce query execution time by 80%
+- Implement proper indexing strategy
+- Add query result caching where appropriate
+- Optimize complex JOIN operations
+- Implement pagination for large result sets
+- Add database query monitoring and alerting

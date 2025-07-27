@@ -310,6 +310,62 @@ npx nightly-code validate --fix
 - `--tasks, -t` - Path to tasks file
 - `--fix` - Attempt to fix common issues
 
+### `nightly-code describe`
+
+Describe work to be done in natural language and generate optimized `nightly-tasks.yaml` file.
+
+```bash
+# If installed globally
+nightly-code describe "Implement user authentication with email verification"
+nightly-code describe --interactive
+nightly-code describe --file tasks.txt
+
+# If installed locally
+npx nightly-code describe "Fix the memory leak in data processing"
+npx nightly-code describe --interactive
+```
+
+**Options:**
+- `--output, -o` - Output file path (default: nightly-tasks.yaml)
+- `--interactive, -i` - Interactive mode for entering multiple tasks
+- `--file, -f` - Read descriptions from a text file
+- `--append` - Append to existing tasks file instead of overwriting
+
+**Examples:**
+
+1. Simple task description:
+   ```bash
+   nightly-code describe "Fix the critical bug in payment processing"
+   ```
+
+2. Complex feature with details:
+   ```bash
+   nightly-code describe "Implement user authentication system with:
+   - Email and password registration
+   - JWT token generation
+   - Password reset functionality
+   - Email verification
+   - Protected routes middleware"
+   ```
+
+3. Load multiple tasks from file:
+   ```bash
+   nightly-code describe --file task-descriptions.txt
+   ```
+
+4. Interactive mode:
+   ```bash
+   nightly-code describe --interactive
+   ```
+
+The AI will automatically:
+- Detect task type (feature, bugfix, refactor, test, docs)
+- Assign appropriate priority based on keywords (critical, urgent, high, etc.)
+- Extract relevant tags from the description
+- Estimate duration based on complexity indicators
+- Generate acceptance criteria
+- Identify files that may need modification
+
 ### `nightly-code report`
 
 Generate and view session reports.

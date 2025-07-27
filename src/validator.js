@@ -126,7 +126,7 @@ class Validator {
     this.prettyLogger.banner('VALIDATION', 'Small');
     this.prettyLogger.divider('═', 60, 'cyan');
     this.prettyLogger.info('🔍 Starting comprehensive validation...');
-    
+
     const validationSpinner = this.prettyLogger.spinner('Running validation checks');
 
     const results = {
@@ -186,7 +186,7 @@ class Validator {
       results.warnings.push(...envValidation.warnings);
 
       validationSpinner.stop();
-      
+
       // Display validation summary
       this.prettyLogger.divider('─', 60, 'gray');
       this.displayValidationSummary(results);
@@ -375,7 +375,7 @@ class Validator {
       // Validate each task
       const taskIds = new Set();
       let totalEstimatedTime = 0;
-      
+
       // Process tasks sequentially to handle async validation
       for (let index = 0; index < tasksData.tasks.length; index++) {
         const task = tasksData.tasks[index];
@@ -468,7 +468,7 @@ class Validator {
         if (task.custom_validation?.script) {
           const scriptPath = path.resolve(this.options.workingDir, task.custom_validation.script);
           const scriptExists = await fs.pathExists(scriptPath);
-          
+
           if (!scriptExists) {
             result.errors.push({
               type: 'missing_custom_validation_script',
@@ -488,7 +488,7 @@ class Validator {
               });
             }
           }
-          
+
           // Store task validation info for summary
           result.taskValidations.push({
             taskId: task.id,
@@ -1224,7 +1224,7 @@ Add usage instructions here.
 
   displayValidationSummary (results) {
     const items = [];
-    
+
     // Configuration validation
     const configStatus = results.validations.configuration;
     if (configStatus) {
@@ -1234,11 +1234,11 @@ Add usage instructions here.
         status: configStatus.valid ? 'success' : 'error'
       });
     }
-    
+
     // Tasks validation
     const tasksStatus = results.validations.tasks;
     if (tasksStatus) {
-      const taskSummary = tasksStatus.valid 
+      const taskSummary = tasksStatus.valid
         ? `Valid (${tasksStatus.taskValidations?.filter(t => t.hasCustomValidation).length || 0} with custom validation)`
         : `${tasksStatus.errors.length} errors`;
       items.push({
@@ -1246,7 +1246,7 @@ Add usage instructions here.
         value: taskSummary,
         status: tasksStatus.valid ? 'success' : 'error'
       });
-      
+
       // Show custom validation script status
       const customValidationTasks = tasksStatus.taskValidations?.filter(t => t.hasCustomValidation) || [];
       if (customValidationTasks.length > 0) {
@@ -1260,7 +1260,7 @@ Add usage instructions here.
         }
       }
     }
-    
+
     // Project validation
     const projectStatus = results.validations.project;
     if (projectStatus) {
@@ -1270,7 +1270,7 @@ Add usage instructions here.
         status: projectStatus.valid ? 'success' : 'error'
       });
     }
-    
+
     // Environment validation
     const envStatus = results.validations.environment;
     if (envStatus) {
@@ -1280,14 +1280,14 @@ Add usage instructions here.
         status: envStatus.valid ? 'success' : 'error'
       });
     }
-    
+
     // Overall status
     items.push({
       label: 'Overall Status',
       value: results.valid ? 'All checks passed' : 'Validation failed',
       status: results.valid ? 'success' : 'error'
     });
-    
+
     if (results.warnings.length > 0) {
       items.push({
         label: 'Warnings',
@@ -1295,9 +1295,9 @@ Add usage instructions here.
         status: 'warning'
       });
     }
-    
+
     this.prettyLogger.statusDashboard('Validation Summary', items);
-    
+
     // Display detailed errors if any
     if (results.errors.length > 0) {
       this.prettyLogger.divider('─', 60, 'gray');
@@ -1309,7 +1309,7 @@ Add usage instructions here.
         }
       });
     }
-    
+
     // Display warnings if any
     if (results.warnings.length > 0) {
       this.prettyLogger.divider('─', 60, 'gray');

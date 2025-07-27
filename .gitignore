@@ -3,6 +3,10 @@
 .idea/
 .nightly-code/
 
+# Generated files
+nightly-tasks.yaml
+nightly-code.yaml
+
 # OS generated files
 .DS_Store
 .DS_Store?

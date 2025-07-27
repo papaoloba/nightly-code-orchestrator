@@ -621,7 +621,7 @@ class Orchestrator extends EventEmitter {
     const timeoutMinutes = Math.round(timeoutMs / TIME.MS.ONE_MINUTE);
     console.log();
     this.prettyLogger.box([
-      `🤖 Executing task with Claude Code`,
+      '🤖 Executing task with Claude Code',
       `⏱️  Timeout: ${timeoutMinutes} minutes`
     ].join('\n'), {
       borderStyle: 'single',
@@ -1493,7 +1493,7 @@ Please implement this task now.`;
 
     // Strip emoji variant selectors for proper table alignment
     const stripVariants = (str) => str.replace(/\uFE0F/g, '');
-    
+
     resultTableData.push(
       [require('chalk').green(stripVariants('✅')), 'Completed Tasks', `${results.completed}`, require('chalk').green('Success')],
       [require('chalk').red(stripVariants('❌')), 'Failed Tasks', `${results.failed}`, results.failed > 0 ? require('chalk').red('Failed') : '-'],
