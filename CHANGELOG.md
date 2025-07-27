@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-07-27
+
+### Added
+- **Automatic Code Improvements**: When all scheduled tasks complete successfully but time remains in the session, the orchestrator automatically triggers general code improvement tasks
+- SuperClaude integration for automatic improvements using `/sc:improve` command with intelligent flags
+- Configurable minimum time threshold for automatic improvements (default: 5 minutes)
+- Comprehensive validation and rollback for automatic improvements
+- Git integration for automatic improvement commits with proper tagging
+- Dry run support for automatic improvements
+- Complete test coverage for automatic improvement functionality
+
+### Enhanced
+- Session workflow now maximizes value by utilizing remaining time for code quality improvements
+- Better time management with automatic buffer calculations
+- Enhanced logging and UI feedback for automatic improvement sessions
+
 ## [1.1.1] - 2025-01-27
 
 ### Fixed

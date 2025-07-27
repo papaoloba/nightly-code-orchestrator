@@ -22,6 +22,7 @@ The Nightly Code Orchestrator transforms your development workflow by automating
 - **🔒 Security-first** approach with sandboxing options
 - **🏗️ Production-ready** with extensive error handling
 - **🧠 SuperClaude integration** for automatic prompt optimization
+- **✨ Automatic improvements** when tasks complete early with time remaining
 
 ## Quick Start
 
@@ -414,6 +415,52 @@ orchestrator.run()
 const taskManager = new TaskManager();
 const tasks = await taskManager.loadTasks();
 const ordered = await taskManager.resolveDependencies(tasks);
+```
+
+### Automatic Code Improvements
+
+When all scheduled tasks complete successfully but time remains in the session, the orchestrator automatically triggers general code improvement tasks. This feature maximizes the value of your 8-hour coding sessions.
+
+#### How It Works
+
+1. **Automatic Trigger**: After all tasks complete, if 5+ minutes remain in session
+2. **Intelligent Selection**: Uses SuperClaude `/sc:improve` command when available, falls back to standard improvement prompts
+3. **Quality Focus**: Automatically focuses on code quality, performance, documentation, and security
+4. **Safe Execution**: Includes validation and rollback if improvements fail
+5. **Git Integration**: Commits improvements with automatic tagging
+
+#### SuperClaude Integration
+
+When SuperClaude is enabled, automatic improvements use the optimized command:
+
+```bash
+/sc:improve --scope project --focus quality --iterative --validate
+```
+
+This leverages the SuperClaude framework's intelligent analysis and improvement patterns.
+
+#### Configuration
+
+Automatic improvements can be controlled via configuration:
+
+```yaml
+# nightly-code.yaml
+session:
+  max_duration: 28800  # 8 hours
+  auto_improvements: true  # Enable automatic improvements (default: true)
+  min_improvement_time: 300  # Minimum time required (5 minutes default)
+
+superclaude:
+  enabled: true  # Enable SuperClaude for optimized improvements
+```
+
+#### Dry Run Mode
+
+In dry run mode, automatic improvements are logged but not executed:
+
+```bash
+npx nightly-code --dry-run
+# Shows what improvements would be made without executing them
 ```
 
 ### Custom Validation Scripts

@@ -611,7 +611,219 @@ class Orchestrator extends EventEmitter {
       await this.createCheckpoint();
     }
 
+    // Check if all tasks are completed and time remains for automatic improvements
+    await this.handleAutomaticImprovements(results);
+
     return results;
+  }
+
+  /**
+   * Handle automatic improvement tasks when all scheduled tasks are completed
+   * but there is still time remaining in the session
+   *
+   * @async
+   * @param {Object} results - Current session results
+   */
+  async handleAutomaticImprovements (results) {
+    // Only run automatic improvements if all original tasks completed successfully
+    if (results.failed > 0) {
+      this.logger.info('⚠️  Skipping automatic improvements due to failed tasks');
+      return;
+    }
+
+    // Check remaining time
+    const elapsed = (Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND;
+    const remainingTime = this.options.maxDuration - elapsed;
+    const minimumTimeForImprovement = 300; // 5 minutes minimum
+
+    if (remainingTime < minimumTimeForImprovement) {
+      this.logger.info(`⏰ Insufficient time remaining for automatic improvements (${Math.round(remainingTime)}s < ${minimumTimeForImprovement}s)`);
+      return;
+    }
+
+    this.logger.info('');
+    this.logger.info('🚀 All tasks completed successfully! Starting automatic improvements...');
+    this.prettyLogger.divider('═', 60, 'green');
+    this.logger.info(`⏱️  Time remaining: ${Math.round(remainingTime / 60)} minutes`);
+    this.logger.info('');
+
+    try {
+      // Create an automatic improvement task
+      const improvementTask = await this.createAutomaticImprovementTask(remainingTime);
+      
+      if (improvementTask) {
+        this.state.currentTask = improvementTask;
+        
+        this.prettyLogger.box([
+          '✨ Automatic Code Improvement Session',
+          `⏱️  Available time: ${Math.round(remainingTime / 60)} minutes`,
+          '🎯 Focus: General code quality and optimization'
+        ].join('\n'), {
+          borderStyle: 'double',
+          borderColor: 'green',
+          padding: 1,
+          align: 'left'
+        });
+
+        // Execute the improvement task
+        const improvementResult = await this.executeAutomaticImprovementTask(improvementTask);
+        
+        if (improvementResult.success) {
+          // Validate and commit the improvements
+          const validation = await this.validateTaskCompletion(improvementTask, improvementResult);
+          
+          if (validation.passed) {
+            if (!this.options.dryRun) {
+              await this.gitManager.commitTask(improvementTask, improvementResult);
+              this.logger.info('✅ Automatic improvements committed successfully');
+            } else {
+              this.logger.info('🔄 Dry run mode - skipping automatic improvement commit');
+            }
+            
+            // Update results
+            results.completed++;
+            this.state.completedTasks.push({
+              task: improvementTask,
+              result: improvementResult,
+              validation,
+              completedAt: Date.now(),
+              automatic: true
+            });
+            
+            this.logger.info('🎉 Automatic improvement session completed successfully!');
+          } else {
+            this.logger.warn('⚠️  Automatic improvement validation failed, reverting changes');
+            if (!this.options.dryRun) {
+              await this.gitManager.revertTaskChanges(improvementTask);
+            }
+          }
+        } else {
+          this.logger.warn('⚠️  Automatic improvement execution failed');
+        }
+        
+        this.state.currentTask = null;
+      }
+    } catch (error) {
+      this.logger.error(`❌ Automatic improvement failed: ${error.message}`);
+      this.state.currentTask = null;
+    }
+  }
+
+  /**
+   * Create an automatic improvement task based on available time and project state
+   *
+   * @async
+   * @param {number} remainingTime - Remaining session time in seconds
+   * @returns {Promise<Object>} Generated improvement task
+   */
+  async createAutomaticImprovementTask (remainingTime) {
+    const improvementDuration = Math.min(remainingTime - 60, 3600); // Leave 1 minute buffer, max 1 hour
+    
+    return {
+      id: `auto-improve-${Date.now()}`,
+      type: 'improvement',
+      priority: 5,
+      title: 'Automatic Code Improvement',
+      requirements: `Perform general code quality improvements and optimizations based on the current codebase state.
+      
+Focus areas:
+- Code quality and maintainability improvements
+- Performance optimizations where applicable  
+- Documentation enhancements
+- Test coverage improvements
+- Security best practices
+- Code style and convention consistency
+
+Time available: ${Math.round(improvementDuration / 60)} minutes`,
+      acceptance_criteria: [
+        'Code quality metrics improved',
+        'No breaking changes introduced',
+        'All existing tests continue to pass',
+        'Changes follow project conventions',
+        'Improvements are well-documented'
+      ],
+      estimated_duration: Math.round(improvementDuration / 60),
+      dependencies: [],
+      tags: ['automatic', 'improvement', 'quality'],
+      files_to_modify: [],
+      enabled: true,
+      automatic: true,
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+  }
+
+  /**
+   * Execute automatic improvement task with appropriate command selection
+   *
+   * @async
+   * @param {Object} task - The improvement task to execute
+   * @returns {Promise<Object>} Task execution result
+   */
+  async executeAutomaticImprovementTask (task) {
+    let prompt;
+    
+    // Use SuperClaude improve command if available
+    if (this.superclaudeConfig?.enabled && this.superclaudeIntegration?.isEnabled()) {
+      this.logger.info('🧠 Using SuperClaude /sc:improve command for automatic improvements');
+      prompt = `/sc:improve --scope project --focus quality --iterative --validate`;
+    } else {
+      // Fallback to standard improvement prompt
+      this.logger.info('🤖 Using standard improvement approach');
+      prompt = await this.generateTaskPrompt(task);
+    }
+
+    const timeoutMs = task.estimated_duration * 60 * TIME.MS.ONE_SECOND;
+    
+    try {
+      const startTime = Date.now();
+      
+      if (this.options.dryRun) {
+        this.logger.info('🔄 Dry run mode - skipping actual automatic improvement execution');
+        return {
+          success: true,
+          output: 'Dry run - automatic improvement task not actually executed',
+          filesChanged: [],
+          duration: 0,
+          automatic: true
+        };
+      }
+
+      // Execute the improvement with Claude Code
+      const result = await this.executeClaudeCode(prompt, {
+        timeout: timeoutMs,
+        workingDir: this.options.workingDir
+      });
+
+      const duration = Date.now() - startTime;
+      const durationSeconds = Math.round(duration / TIME.MS.ONE_SECOND);
+
+      // Analyze changes made by Claude Code
+      const filesChanged = await this.gitManager.getChangedFiles();
+
+      this.logger.info(`✅ Automatic improvement completed in ${durationSeconds}s`);
+      if (filesChanged.length > 0) {
+        this.logger.info(`📝 ${filesChanged.length} files were modified during improvements`);
+      }
+
+      return {
+        success: true,
+        output: result.stdout,
+        error: result.stderr,
+        filesChanged,
+        duration,
+        automatic: true
+      };
+    } catch (error) {
+      this.logger.error(`💥 Automatic improvement execution failed: ${error.message}`);
+      return {
+        success: false,
+        error: error.message,
+        filesChanged: [],
+        duration: 0,
+        automatic: true
+      };
+    }
   }
 
   async executeTask (task) {
