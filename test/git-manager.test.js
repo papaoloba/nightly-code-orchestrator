@@ -128,7 +128,7 @@ describe('GitManager', () => {
 
       // Create first task branch
       const depBranchName = await gitManager.createTaskBranch(dependencyTask);
-      
+
       // Mock that the dependency branch exists
       mockGitInstance.branchLocal.mockResolvedValue({
         all: ['main', depBranchName]
@@ -144,7 +144,7 @@ describe('GitManager', () => {
     test('should throw error when dependency task not found', async () => {
       // Enable strict dependency checking for this test
       gitManager.options.strictDependencyChecking = true;
-      
+
       const dependentTask = {
         id: 'task-002',
         title: 'Extended feature',
@@ -180,7 +180,7 @@ describe('GitManager', () => {
         stdout: 'https://github.com/test/repo/pull/123'
       });
       gitManager.checkGitHubCLI = jest.fn().mockResolvedValue(true);
-      
+
       // Mock clean status for PR creation (no uncommitted changes)
       mockGitInstance.status.mockResolvedValue({
         current: 'main',

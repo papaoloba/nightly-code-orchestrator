@@ -1065,6 +1065,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       }
 
       // Execute the improvement with Claude Code
+      this.logInfo('🚀 Starting automatic improvement task with Claude Code...');
       const result = await this.executeClaudeCode(prompt, {
         timeout: timeoutMs,
         workingDir: this.options.workingDir
@@ -1142,14 +1143,14 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       // Initial execution
       do {
         iterationCount++;
-        
+
         // Safeguard against infinite loops
         if (iterationCount > MAX_ITERATIONS) {
           this.logWarn(`⚠️  Maximum iteration limit (${MAX_ITERATIONS}) reached. Stopping execution.`);
           taskCompleted = true;
           break;
         }
-        
+
         const elapsedMs = Date.now() - totalStartTime;
         const remainingMs = minimumDurationMs - elapsedMs;
 
@@ -1202,6 +1203,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         );
 
         // Execute Claude Code with the generated prompt
+        this.logInfo(`🔄 Running task iteration ${iterationCount} with Claude Code...`);
         const result = await this.executeClaudeCode(prompt, {
           timeout: iterationTimeoutMs,
           workingDir: this.options.workingDir
@@ -1219,15 +1221,15 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         totalOutput +=
           (totalOutput ? `\n\n--- Iteration ${iterationCount} ---\n` : '') +
           result.stdout;
-        
+
         // Check for output size limit to prevent memory issues
         if (totalOutput.length > STORAGE.MAX_OUTPUT_SIZE) {
           const truncateAt = STORAGE.MAX_OUTPUT_SIZE / 2;
-          totalOutput = '...[Output truncated due to size limit]...\n' + 
-                       totalOutput.slice(-truncateAt);
+          totalOutput = `...[Output truncated due to size limit]...\n${
+            totalOutput.slice(-truncateAt)}`;
           this.logWarn('⚠️  Output truncated to prevent memory exhaustion');
         }
-        
+
         totalFilesChanged = [
           ...new Set([...totalFilesChanged, ...iterationFilesChanged])
         ];
@@ -1298,6 +1300,9 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   }
 
   async executeClaudeCode (prompt, options = {}) {
+    // Inform user that Claude Code is starting
+    this.logInfo('🤖 Claude Code is running...');
+
     // Log the original prompt
     this.logPrompt(prompt, 'Original');
 
@@ -1401,6 +1406,9 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
   async executeClaudeCodeSingle (prompt, options = {}) {
     return new Promise((resolve, reject) => {
+      // Log execution start
+      this.logInfo('⚙️  Executing Claude Code command...');
+
       // Use -p flag for proper prompt handling
       const args = [prompt, '-p', '--dangerously-skip-permissions'];
 
@@ -1618,12 +1626,13 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       // Execute Claude Code with the optimization prompt
       const retryInfo = retryCount > 0 ? ` (retry ${retryCount})` : '';
       this.logInfo(`📝 Running prompt optimization...${retryInfo}`);
+      this.logInfo('🤖 Claude Code is optimizing your prompt with SuperClaude Framework...');
 
       // Log the optimization prompt itself
       this.logPrompt(optimizationPrompt, 'SuperClaude Optimization Request');
 
       const result = await this.executeClaudeCodeSingle(optimizationPrompt, {
-        timeout: 30000, // 30 second timeout for optimization
+        // No timeout for prompt optimization - let it run as long as needed
         workingDir: this.options.workingDir
       });
 

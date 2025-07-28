@@ -390,7 +390,6 @@ class TaskDescriptor {
    * @returns {Array} Array of task objects
    */
   splitTaskDescription (description) {
-
     // Strategy 1: Split by bullet points or numbered lists
     const bulletTasks = this.splitByBulletPoints(description);
     if (bulletTasks.length > 1) {

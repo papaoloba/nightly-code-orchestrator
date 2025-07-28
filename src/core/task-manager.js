@@ -313,7 +313,7 @@ class TaskManager {
     const invalidDependencies = [];
     for (const task of tasksToOrder) {
       const validDependencies = [];
-      
+
       for (const depId of task.dependencies || []) {
         if (!taskMap.has(depId)) {
           // Log warning about invalid dependency
@@ -322,18 +322,18 @@ class TaskManager {
         } else {
           // Keep valid dependencies
           validDependencies.push(depId);
-          
+
           // Add to dependents list
           const depNode = dependencyGraph.get(depId);
           depNode.dependents.push(task.id);
         }
       }
-      
+
       // Update task with only valid dependencies
       task.dependencies = validDependencies;
       dependencyGraph.get(task.id).dependencies = validDependencies;
     }
-    
+
     // If there were invalid dependencies, log a summary
     if (invalidDependencies.length > 0) {
       this.logWarn(`Found ${invalidDependencies.length} invalid dependencies. They have been removed.`);
