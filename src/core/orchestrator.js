@@ -1606,6 +1606,15 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   }
 
   async optimizePromptWithSuperClaude (originalPrompt, retryCount = 0) {
+    const MAX_OPTIMIZATION_RETRIES = 2;
+
+    // Check if we've exceeded max retries
+    if (retryCount > MAX_OPTIMIZATION_RETRIES) {
+      this.logWarn(`⚠️  Maximum optimization retries (${MAX_OPTIMIZATION_RETRIES}) exceeded`);
+      this.logInfo('📝 Falling back to original prompt');
+      return originalPrompt;
+    }
+
     this.logInfo('🧠 Optimizing prompt with SuperClaude Framework...');
 
     // Use the complete optimization guide with the prompt
@@ -1632,7 +1641,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       this.logPrompt(optimizationPrompt, 'SuperClaude Optimization Request');
 
       const result = await this.executeClaudeCodeSingle(optimizationPrompt, {
-        // No timeout for prompt optimization - let it run as long as needed
+        timeout: TIME.MS.FIVE_MINUTES, // 5 minute timeout for prompt optimization
         workingDir: this.options.workingDir
       });
 
@@ -1646,11 +1655,16 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
           this.logWarn(
             `⚠️  Incorrect format detected (space after colon): ${optimizedCommand}`
           );
-          this.logInfo('🔄 Retrying to ensure correct /sc:command format...');
-          return this.optimizePromptWithSuperClaude(
-            originalPrompt,
-            retryCount + 1
-          );
+          if (retryCount < MAX_OPTIMIZATION_RETRIES) {
+            this.logInfo('🔄 Retrying to ensure correct /sc:command format...');
+            return this.optimizePromptWithSuperClaude(
+              originalPrompt,
+              retryCount + 1
+            );
+          } else {
+            this.logInfo('📝 Max retries reached, falling back to original prompt');
+            return originalPrompt;
+          }
         }
 
         // Check if output starts with /sc: - if not, retry with stricter instructions
@@ -1658,8 +1672,13 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
           this.logWarn(
             `⚠️  Output doesn't start with /sc: pattern: ${optimizedCommand}`
           );
-          this.logInfo('🔄 Retrying to ensure /sc: prefix...');
-          return this.optimizePromptWithSuperClaude(originalPrompt, 1);
+          if (retryCount < MAX_OPTIMIZATION_RETRIES) {
+            this.logInfo('🔄 Retrying to ensure /sc: prefix...');
+            return this.optimizePromptWithSuperClaude(originalPrompt, retryCount + 1);
+          } else {
+            this.logInfo('📝 Max retries reached, falling back to original prompt');
+            return originalPrompt;
+          }
         }
 
         // Accept the command if it's different from original or starts with /sc:
@@ -1677,7 +1696,13 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         return originalPrompt;
       }
     } catch (error) {
-      this.logError(`❌ Prompt optimization failed: ${error.message}`);
+      // Provide more context for timeout errors
+      if (error.message.includes('timed out')) {
+        this.logError('❌ Prompt optimization timed out after 5 minutes');
+        this.logInfo('💡 Consider simplifying your prompt or disabling SuperClaude optimization');
+      } else {
+        this.logError(`❌ Prompt optimization failed: ${error.message}`);
+      }
       this.logInfo('📝 Falling back to original prompt');
       return originalPrompt;
     }
