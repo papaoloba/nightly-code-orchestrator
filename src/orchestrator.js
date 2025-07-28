@@ -12,7 +12,7 @@ const { Validator } = require('./validator');
 const { Reporter } = require('./reporter');
 const { SuperClaudeIntegration } = require('./superclaude-integration');
 const { SUPERCLAUDE_OPTIMIZATION_GUIDE } = require('./superclaude-optimization-guide');
-const { TIME, STORAGE, RETRY, LIMITS } = require('./constants');
+const { TIME, STORAGE, RETRY } = require('./constants');
 const PrettyLogger = require('./pretty-logger');
 
 /**
@@ -355,7 +355,7 @@ class Orchestrator extends EventEmitter {
         workingDir: this.options.workingDir,
         logger: this.logger,
         dryRun: this.options.dryRun,
-        branchPrefix: fullConfig?.git?.branch_prefix || 'nightly-',
+        branchPrefix: fullConfig?.git?.branch_prefix || 'nightly/',
         autoPush: fullConfig?.git?.auto_push !== false,
         createPR: fullConfig?.git?.create_pr !== false,
         prTemplate: fullConfig?.git?.pr_template || null,
@@ -797,6 +797,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
       const duration = Date.now() - startTime;
       const durationSeconds = Math.round(duration / TIME.MS.ONE_SECOND);
+      
+      // Add 30 second delay to allow file system to settle
+      this.logger.info('⏳ Waiting 30 seconds for file system to settle...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
 
       // Analyze changes made by Claude Code
       const filesChanged = await this.gitManager.getChangedFiles();
@@ -873,6 +877,9 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         this.logger.info(`📝 ${filesChanged.length} files were modified`);
       }
 
+      // Note: filesChanged is captured here for immediate feedback, but the actual
+      // file staging happens in git-manager.js during commit creation, which includes
+      // a double-check for any missed files
       return {
         success: true,
         output: result.stdout,
@@ -962,7 +969,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
   async executeClaudeCodeSingle (prompt, options = {}) {
     return new Promise((resolve, reject) => {
-      const args = ['--dangerously-skip-permissions'];
+      // Use -p flag for proper prompt handling
+      const args = [prompt, '-p', '--dangerously-skip-permissions'];
 
       const child = spawn('claude', args, {
         cwd: options.workingDir || this.options.workingDir,
@@ -977,34 +985,11 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       child.stdout.on('data', (data) => {
         const output = data.toString();
         stdout += output;
-        // Display Claude Code output in real-time with improved formatting
-        output.split('\n').forEach(line => {
-          if (line.trim()) {
-            // Add different colors and formatting for different types of Claude output
-            if (line.includes('Wave') || line.includes('wave')) {
-              this.logger.info(`  \x1b[35m🤖 Claude\x1b[0m │ \x1b[35m${line}\x1b[0m`); // Magenta for waves
-            } else if (line.includes('✅') || line.includes('Success') || line.includes('Completed')) {
-              this.logger.info(`  \x1b[32m🤖 Claude\x1b[0m │ \x1b[32m${line}\x1b[0m`); // Green for success
-            } else if (line.includes('❌') || line.includes('Error') || line.includes('Failed')) {
-              this.logger.info(`  \x1b[31m🤖 Claude\x1b[0m │ \x1b[31m${line}\x1b[0m`); // Red for errors
-            } else if (line.includes('⚠️') || line.includes('Warning')) {
-              this.logger.info(`  \x1b[33m🤖 Claude\x1b[0m │ \x1b[33m${line}\x1b[0m`); // Yellow for warnings
-            } else {
-              this.logger.info(`  \x1b[36m🤖 Claude\x1b[0m │ ${line}`); // Cyan for robot icon, normal text
-            }
-          }
-        });
       });
 
       child.stderr.on('data', (data) => {
         const output = data.toString();
         stderr += output;
-        // Display Claude Code errors in real-time
-        output.split('\n').forEach(line => {
-          if (line.trim()) {
-            this.logger.warn(`⚠️  Claude: ${line}`);
-          }
-        });
       });
 
       // Set timeout
@@ -1018,8 +1003,37 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         this.state.claudeProcess = null;
 
         if (code === 0) {
+          // Display Claude Code output after completion
+          if (stdout.trim()) {
+            stdout.split('\n').forEach(line => {
+              if (line.trim()) {
+                // Add different colors and formatting for different types of Claude output
+                if (line.includes('Wave') || line.includes('wave')) {
+                  this.logger.info(`  \x1b[35m🤖 Claude\x1b[0m │ \x1b[35m${line}\x1b[0m`); // Magenta for waves
+                } else if (line.includes('✅') || line.includes('Success') || line.includes('Completed')) {
+                  this.logger.info(`  \x1b[32m🤖 Claude\x1b[0m │ \x1b[32m${line}\x1b[0m`); // Green for success
+                } else if (line.includes('❌') || line.includes('Error') || line.includes('Failed')) {
+                  this.logger.info(`  \x1b[31m🤖 Claude\x1b[0m │ \x1b[31m${line}\x1b[0m`); // Red for errors
+                } else if (line.includes('⚠️') || line.includes('Warning')) {
+                  this.logger.info(`  \x1b[33m🤖 Claude\x1b[0m │ \x1b[33m${line}\x1b[0m`); // Yellow for warnings
+                } else {
+                  this.logger.info(`  \x1b[36m🤖 Claude\x1b[0m │ ${line}`); // Cyan for robot icon, normal text
+                }
+              }
+            });
+          }
+
           resolve({ stdout, stderr, code });
         } else {
+          // Display Claude Code errors
+          if (stderr.trim()) {
+            stderr.split('\n').forEach(line => {
+              if (line.trim()) {
+                this.logger.warn(`⚠️  Claude: ${line}`);
+              }
+            });
+          }
+
           // Combine stderr and stdout for better error reporting
           const errorOutput = stderr.trim() || stdout.trim() || 'No output captured';
           reject(new Error(`Claude Code exited with code ${code}: ${errorOutput}`));
@@ -1034,10 +1048,6 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
       // Log the final prompt being sent
       this.logPrompt(prompt, 'Final');
-
-      // Send the prompt to Claude Code
-      child.stdin.write(prompt);
-      child.stdin.end();
     });
   }
 

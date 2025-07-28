@@ -242,7 +242,7 @@ end
         setup_commands: ['npm ci']
       },
       git: {
-        branch_prefix: 'nightly-',
+        branch_prefix: 'nightly/',
         auto_push: true,
         create_pr: true,
         pr_template: '.github/pull_request_template.md',

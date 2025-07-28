@@ -171,6 +171,18 @@ describe('GitManager', () => {
         stdout: 'https://github.com/test/repo/pull/123'
       });
       gitManager.checkGitHubCLI = jest.fn().mockResolvedValue(true);
+      
+      // Mock clean status for PR creation (no uncommitted changes)
+      mockGitInstance.status.mockResolvedValue({
+        current: 'main',
+        files: [],
+        modified: [],
+        created: [],
+        deleted: [],
+        renamed: [],
+        staged: [],
+        not_added: []
+      });
     });
 
     test('should create task PR with correct base branch', async () => {

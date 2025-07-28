@@ -8,7 +8,7 @@ class GitManager {
   constructor (options = {}) {
     this.options = {
       workingDir: options.workingDir || process.cwd(),
-      branchPrefix: options.branchPrefix || 'nightly-',
+      branchPrefix: options.branchPrefix || 'nightly/',
       autoPush: options.autoPush !== false,
       createPR: options.createPR !== false,
       prTemplate: options.prTemplate || null,
@@ -40,9 +40,10 @@ class GitManager {
     this.operationTimers.delete(operationName);
 
     const seconds = Math.round(duration / TIME.MS.ONE_SECOND);
-    const timeStr = seconds >= 60
-      ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-      : `${seconds}s`;
+    const timeStr =
+      seconds >= 60
+        ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+        : `${seconds}s`;
 
     return ` \x1b[35m[${timeStr}]\x1b[0m`; // Magenta color for git operation timing
   }
@@ -61,7 +62,9 @@ class GitManager {
 
       if (!isRepo) {
         if (this.options.dryRun) {
-          this.options.logger.info('🔄 Dry run mode - would initialize new git repository');
+          this.options.logger.info(
+            '🔄 Dry run mode - would initialize new git repository'
+          );
           // Set a fake original branch for dry run
           this.originalBranch = 'main';
           return;
@@ -81,16 +84,22 @@ class GitManager {
       const status = await this.git.status();
       this.originalBranch = status.current;
 
-      this.options.logger.info(`✅ Git repository ready on branch: ${this.originalBranch}`);
+      this.options.logger.info(
+        `✅ Git repository ready on branch: ${this.originalBranch}`
+      );
 
       // Ensure we're on a clean state (skip in dry-run mode)
       if (!this.options.dryRun) {
         await this.ensureCleanState();
       } else {
-        this.options.logger.info('🔄 Dry run mode - skipping clean state check');
+        this.options.logger.info(
+          '🔄 Dry run mode - skipping clean state check'
+        );
       }
     } catch (error) {
-      this.options.logger.error('❌ Failed to ensure git repository', { error: error.message });
+      this.options.logger.error('❌ Failed to ensure git repository', {
+        error: error.message
+      });
       throw new Error(`Git repository setup failed: ${error.message}`);
     }
   }
@@ -105,7 +114,7 @@ class GitManager {
 
     // Create a minimal .gitignore if it doesn't exist
     const gitignorePath = path.join(this.options.workingDir, '.gitignore');
-    if (!await fs.pathExists(gitignorePath)) {
+    if (!(await fs.pathExists(gitignorePath))) {
       const defaultGitignore = `# Nightly Code
 .nightly-code/
 *.log
@@ -126,11 +135,21 @@ node_modules/
     const status = await this.git.status();
 
     if (status.files.length > 0) {
-      const changeCount = status.modified.length + status.created.length + status.deleted.length + status.staged.length;
-      this.options.logger.warn(`⚠️  Found ${changeCount} uncommitted changes in working directory`);
+      const changeCount =
+        status.modified.length +
+        status.created.length +
+        status.deleted.length +
+        status.staged.length;
+      this.options.logger.warn(
+        `⚠️  Found ${changeCount} uncommitted changes in working directory`
+      );
 
       // Stash changes to preserve them
-      await this.git.stash(['push', '-m', `Nightly Code auto-stash ${new Date().toISOString()}`]);
+      await this.git.stash([
+        'push',
+        '-m',
+        `Nightly Code auto-stash ${new Date().toISOString()}`
+      ]);
       this.options.logger.info('💾 Uncommitted changes safely stashed');
     } else {
       this.options.logger.info('✨ Working directory is clean');
@@ -140,7 +159,9 @@ node_modules/
   async createSessionBranch (sessionId) {
     if (this.options.dryRun) {
       const branchName = this.generateSessionBranchName(sessionId);
-      this.options.logger.info(`🔄 Dry run mode - would create session branch: ${branchName}`);
+      this.options.logger.info(
+        `🔄 Dry run mode - would create session branch: ${branchName}`
+      );
       this.sessionBranch = {
         branchName,
         sessionId,
@@ -160,7 +181,9 @@ node_modules/
     try {
       // Ensure we have an original branch
       if (!this.originalBranch) {
-        throw new Error('Git repository not initialized. Call ensureRepository() first.');
+        throw new Error(
+          'Git repository not initialized. Call ensureRepository() first.'
+        );
       }
 
       // Ensure we're on the original branch and it's up to date
@@ -172,7 +195,9 @@ node_modules/
       // Verify we're still on main after pull (in case of conflicts)
       const currentBranch = await this.getCurrentBranch();
       if (currentBranch !== this.originalBranch) {
-        throw new Error(`Expected to be on ${this.originalBranch} but on ${currentBranch}`);
+        throw new Error(
+          `Expected to be on ${this.originalBranch} but on ${currentBranch}`
+        );
       }
 
       // Create and checkout new session branch from the updated main
@@ -185,12 +210,20 @@ node_modules/
         baseBranch: this.originalBranch
       };
 
-      this.logGitWithTiming('info', `✅ Session branch created successfully from updated ${this.originalBranch}`, 'create-session-branch');
+      this.logGitWithTiming(
+        'info',
+        `✅ Session branch created successfully from updated ${this.originalBranch}`,
+        'create-session-branch'
+      );
 
       return branchName;
     } catch (error) {
-      this.options.logger.error(`❌ Failed to create session branch: ${error.message}`);
-      throw new Error(`Failed to create session branch for ${sessionId}: ${error.message}`);
+      this.options.logger.error(
+        `❌ Failed to create session branch: ${error.message}`
+      );
+      throw new Error(
+        `Failed to create session branch for ${sessionId}: ${error.message}`
+      );
     }
   }
 
@@ -198,9 +231,13 @@ node_modules/
     if (this.options.prStrategy === 'session') {
       // Legacy behavior: use session branch
       if (!this.sessionBranch) {
-        throw new Error('No session branch created. Use createSessionBranch() first.');
+        throw new Error(
+          'No session branch created. Use createSessionBranch() first.'
+        );
       }
-      this.options.logger.info(`📌 Using session branch for task: ${task.title}`);
+      this.options.logger.info(
+        `📌 Using session branch for task: ${task.title}`
+      );
       return this.sessionBranch.branchName;
     }
 
@@ -209,7 +246,9 @@ node_modules/
     const taskBranchName = this.generateTaskBranchName(task);
 
     if (this.options.dryRun) {
-      this.options.logger.info(`🔄 Dry run mode - would create task branch: ${taskBranchName}`);
+      this.options.logger.info(
+        `🔄 Dry run mode - would create task branch: ${taskBranchName}`
+      );
       this.options.logger.info(`   └─ Base: ${baseBranch}`);
       this.taskBranches.set(task.id, {
         branchName: taskBranchName,
@@ -228,7 +267,9 @@ node_modules/
     try {
       // Ensure we have an original branch
       if (!this.originalBranch) {
-        throw new Error('Git repository not initialized. Call ensureRepository() first.');
+        throw new Error(
+          'Git repository not initialized. Call ensureRepository() first.'
+        );
       }
 
       // Ensure we're on the base branch
@@ -245,18 +286,30 @@ node_modules/
         createdAt: Date.now()
       });
 
-      this.logGitWithTiming('info', `✅ Task branch created successfully from ${baseBranch}`, 'create-task-branch');
+      this.logGitWithTiming(
+        'info',
+        `✅ Task branch created successfully from ${baseBranch}`,
+        'create-task-branch'
+      );
 
       return taskBranchName;
     } catch (error) {
-      this.options.logger.error(`❌ Failed to create task branch: ${error.message}`);
-      throw new Error(`Failed to create task branch for ${task.id}: ${error.message}`);
+      this.options.logger.error(
+        `❌ Failed to create task branch: ${error.message}`
+      );
+      throw new Error(
+        `Failed to create task branch for ${task.id}: ${error.message}`
+      );
     }
   }
 
-  generateSessionBranchName (sessionId) {
+  generateSessionBranchName (_sessionId) {
     const date = new Date().toISOString().split('T')[0];
-    const time = new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '');
+    const time = new Date()
+      .toISOString()
+      .split('T')[1]
+      .split('.')[0]
+      .replace(/:/g, '');
 
     return `${this.options.branchPrefix}session-${date}-${time}`;
   }
@@ -287,7 +340,9 @@ node_modules/
   determineBaseBranch (task) {
     // Ensure we have an original branch
     if (!this.originalBranch) {
-      throw new Error('Git repository not initialized. Call ensureRepository() first.');
+      throw new Error(
+        'Git repository not initialized. Call ensureRepository() first.'
+      );
     }
 
     // If no dependencies, use original branch (main)
@@ -300,12 +355,16 @@ node_modules/
     const depTaskInfo = this.taskBranches.get(lastDepId);
 
     if (depTaskInfo && depTaskInfo.branchName) {
-      this.options.logger.info(`📎 Task ${task.id} will branch from dependency ${lastDepId}`);
+      this.options.logger.info(
+        `📎 Task ${task.id} will branch from dependency ${lastDepId}`
+      );
       return depTaskInfo.branchName;
     }
 
     // Dependency not found - this is an error condition
-    const error = new Error(`Task ${task.id} depends on ${lastDepId} which has not been completed`);
+    const error = new Error(
+      `Task ${task.id} depends on ${lastDepId} which has not been completed`
+    );
     this.options.logger.error(`❌ ${error.message}`);
     throw error;
   }
@@ -315,7 +374,9 @@ node_modules/
       // Check if remote exists
       const remotes = await this.git.getRemotes(true);
       if (remotes.length === 0) {
-        this.options.logger.debug('📡 No remote repository configured, skipping pull');
+        this.options.logger.debug(
+          '📡 No remote repository configured, skipping pull'
+        );
         return;
       }
 
@@ -325,27 +386,49 @@ node_modules/
       this.options.logger.info('✅ Successfully pulled latest changes');
     } catch (error) {
       // Don't fail if pull fails (might be offline or no remote)
-      this.options.logger.warn(`⚠️  Failed to pull latest changes: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to pull latest changes: ${error.message}`
+      );
     }
   }
 
   async commitTaskChanges (task, result, commitChunks = []) {
     if (this.options.dryRun) {
       const fileCount = result.filesChanged?.length || 0;
-      this.options.logger.info(`🔄 Dry run mode - would commit task changes (${fileCount} files modified)`);
+      this.options.logger.info(
+        `🔄 Dry run mode - would commit task changes (${fileCount} files modified)`
+      );
       return ['dry-run-commit'];
     }
 
-    const fileCount = result.filesChanged?.length || 0;
-    this.options.logger.info(`💾 Committing task changes (${fileCount} files modified)`);
+    // Get the current changed files to ensure we have the most up-to-date list
+    const currentChangedFiles = await this.getChangedFiles();
+    const reportedFileCount = result.filesChanged?.length || 0;
+    const actualFileCount = currentChangedFiles.length;
+
+    if (actualFileCount > reportedFileCount) {
+      this.options.logger.warn(
+        `⚠️  Found ${
+          actualFileCount - reportedFileCount
+        } additional files changed after task execution`
+      );
+      // Update the result with the actual files changed
+      result.filesChanged = currentChangedFiles;
+    }
+
+    this.options.logger.info(
+      `💾 Committing task changes (${actualFileCount} files modified)`
+    );
 
     try {
       // If no commit chunks provided, create a single commit
       if (commitChunks.length === 0) {
-        commitChunks = [{
-          message: this.generateCommitMessage(task, result),
-          files: result.filesChanged || []
-        }];
+        commitChunks = [
+          {
+            message: this.generateCommitMessage(task, result),
+            files: result.filesChanged || []
+          }
+        ];
       }
 
       const commits = [];
@@ -374,7 +457,9 @@ node_modules/
 
         // Add specific files for this chunk or all changes if none specified
         if (chunk.files && chunk.files.length > 0) {
-          this.options.logger.info(`📝 Staging files for commit: ${chunk.files.join(', ')}`);
+          this.options.logger.info(
+            `📝 Staging files for commit: ${chunk.files.join(', ')}`
+          );
           for (const file of chunk.files) {
             await this.git.add(file);
           }
@@ -382,26 +467,37 @@ node_modules/
           this.options.logger.info('📝 Staging all changes...');
           await this.git.add('.');
         }
-        
+
         // Double-check: ensure ALL modified files are staged before commit
         // This catches any files that might have been missed or created after initial detection
         const status = await this.git.status();
-        const unstaged = [...status.modified, ...status.created, ...status.deleted, ...status.renamed.map(r => r.to)];
-        
+        const unstaged = [
+          ...status.modified,
+          ...status.created,
+          ...status.deleted,
+          ...status.renamed.map((r) => r.to)
+        ];
+
         if (unstaged.length > 0) {
-          this.options.logger.warn(`⚠️  Found ${unstaged.length} unstaged files, adding them now...`);
+          this.options.logger.warn(
+            `⚠️  Found ${unstaged.length} unstaged files, adding them now...`
+          );
           this.options.logger.info(`📝 Unstaged files: ${unstaged.join(', ')}`);
           await this.git.add('.');
         }
 
         // Create commit
-        this.options.logger.info(`✨ Creating commit: ${commitMessage.split('\n')[0]}`);
+        this.options.logger.info(
+          `✨ Creating commit: ${commitMessage.split('\n')[0]}`
+        );
         const commitResult = await this.git.commit(commitMessage);
         commits.push(commitResult.commit);
       }
 
       // Task completion tracked via commit message convention
-      this.options.logger.info('📝 Task completion tracked via commit message convention');
+      this.options.logger.info(
+        '📝 Task completion tracked via commit message convention'
+      );
 
       // Push to remote if configured
       if (this.options.autoPush) {
@@ -412,7 +508,9 @@ node_modules/
         }
       }
 
-      this.options.logger.info(`🎉 Task completed with ${commits.length} commit(s)!`);
+      this.options.logger.info(
+        `🎉 Task completed with ${commits.length} commit(s)!`
+      );
 
       return commits;
     } catch (error) {
@@ -426,7 +524,13 @@ node_modules/
     return this.commitTaskChanges(task, result);
   }
 
-  generateCommitMessage (task, result, isProgressCommit = false, commitNumber = null, totalCommits = null) {
+  generateCommitMessage (
+    task,
+    result,
+    isProgressCommit = false,
+    commitNumber = null,
+    totalCommits = null
+  ) {
     const type = this.getCommitType(task.type);
     const scope = this.extractScope(task);
     const description = task.title.slice(0, 50);
@@ -441,7 +545,9 @@ node_modules/
 
     // For progress commits, keep the message shorter
     if (isProgressCommit) {
-      return `${subject}\\n\\n${result.summary || 'Work in progress on task implementation.'}`;
+      return `${subject}\\n\\n${
+        result.summary || 'Work in progress on task implementation.'
+      }`;
     }
 
     // Full message for task completion
@@ -451,19 +557,26 @@ node_modules/
     const body = [];
 
     if (task.requirements) {
-      body.push(task.requirements.slice(0, 200) + (task.requirements.length > 200 ? '...' : ''));
+      body.push(
+        task.requirements.slice(0, 200) +
+          (task.requirements.length > 200 ? '...' : '')
+      );
       body.push('');
     }
 
     if (task.acceptance_criteria && task.acceptance_criteria.length > 0) {
-      task.acceptance_criteria.forEach(criteria => {
+      task.acceptance_criteria.forEach((criteria) => {
         body.push(`- ${criteria}`);
       });
       body.push('');
     }
 
     if (result.filesChanged && result.filesChanged.length > 0) {
-      body.push(`Files changed: ${result.filesChanged.slice(0, 5).join(', ')}${result.filesChanged.length > 5 ? '...' : ''}`);
+      body.push(
+        `Files changed: ${result.filesChanged.slice(0, 5).join(', ')}${
+          result.filesChanged.length > 5 ? '...' : ''
+        }`
+      );
       body.push('');
     }
 
@@ -473,7 +586,11 @@ node_modules/
     footer.push(`Task-Title: ${task.title}`);
     footer.push(`Task-Type: ${task.type || 'feature'}`);
     footer.push('Task-Status: completed');
-    footer.push(`Task-Duration: ${Math.round((result.duration || 0) / TIME.MS.ONE_SECOND)}`);
+    footer.push(
+      `Task-Duration: ${Math.round(
+        (result.duration || 0) / TIME.MS.ONE_SECOND
+      )}`
+    );
     footer.push(`Task-Session: ${this.sessionBranch?.sessionId || 'unknown'}`);
     footer.push(`Task-Date: ${new Date().toISOString()}`);
 
@@ -501,8 +618,18 @@ node_modules/
   extractScope (task) {
     // Try to extract scope from tags or files to modify
     if (task.tags && task.tags.length > 0) {
-      const commonScopes = ['api', 'ui', 'auth', 'db', 'config', 'build', 'test'];
-      const matchingScope = task.tags.find(tag => commonScopes.includes(tag.toLowerCase()));
+      const commonScopes = [
+        'api',
+        'ui',
+        'auth',
+        'db',
+        'config',
+        'build',
+        'test'
+      ];
+      const matchingScope = task.tags.find((tag) =>
+        commonScopes.includes(tag.toLowerCase())
+      );
       if (matchingScope) {
         return `(${matchingScope})`;
       }
@@ -530,18 +657,24 @@ node_modules/
       // Check if remote exists
       const remotes = await this.git.getRemotes(true);
       if (remotes.length === 0) {
-        this.options.logger.debug('📡 No remote repository configured, skipping push');
+        this.options.logger.debug(
+          '📡 No remote repository configured, skipping push'
+        );
         return;
       }
 
       this.options.logger.info('📤 Pushing session branch to remote...');
 
       // Push session branch to remote
-      await this.git.push('origin', this.sessionBranch.branchName, ['--set-upstream']);
+      await this.git.push('origin', this.sessionBranch.branchName, [
+        '--set-upstream'
+      ]);
 
       this.options.logger.info('✅ Session branch pushed to remote');
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to push session branch: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to push session branch: ${error.message}`
+      );
       // Don't throw error, as this is not critical for local development
     }
   }
@@ -550,32 +683,42 @@ node_modules/
     try {
       const taskBranchInfo = this.taskBranches.get(task.id);
       if (!taskBranchInfo) {
-        this.options.logger.warn(`⚠️  No task branch found for task ${task.id}`);
+        this.options.logger.warn(
+          `⚠️  No task branch found for task ${task.id}`
+        );
         return;
       }
 
       // Check if remote exists
       const remotes = await this.git.getRemotes(true);
       if (remotes.length === 0) {
-        this.options.logger.debug('📡 No remote repository configured, skipping push');
+        this.options.logger.debug(
+          '📡 No remote repository configured, skipping push'
+        );
         return;
       }
 
       this.options.logger.info('📤 Pushing task branch to remote...');
 
       // Push task branch to remote
-      await this.git.push('origin', taskBranchInfo.branchName, ['--set-upstream']);
+      await this.git.push('origin', taskBranchInfo.branchName, [
+        '--set-upstream'
+      ]);
 
       this.options.logger.info('✅ Task branch pushed to remote');
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to push task branch: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to push task branch: ${error.message}`
+      );
       // Don't throw error, as this is not critical for local development
     }
   }
 
   async createTaskPR (task, result) {
     if (this.options.dryRun) {
-      this.options.logger.info('🔄 Dry run mode - would create task pull request');
+      this.options.logger.info(
+        '🔄 Dry run mode - would create task pull request'
+      );
       this.options.logger.info(`   └─ Title: [Task ${task.id}] ${task.title}`);
       return `https://github.com/example/repo/pull/dry-run-${task.id}`;
     }
@@ -584,37 +727,63 @@ node_modules/
       // Check if GitHub CLI is available
       const hasGhCli = await this.checkGitHubCLI();
       if (!hasGhCli) {
-        this.options.logger.warn('⚠️  GitHub CLI not available, skipping PR creation');
+        this.options.logger.warn(
+          '⚠️  GitHub CLI not available, skipping PR creation'
+        );
         return;
       }
 
       const taskBranchInfo = this.taskBranches.get(task.id);
       if (!taskBranchInfo) {
-        this.options.logger.warn(`⚠️  No task branch found for task ${task.id}`);
+        this.options.logger.warn(
+          `⚠️  No task branch found for task ${task.id}`
+        );
         return;
       }
 
       // Check for any uncommitted changes before creating PR
       const preStatus = await this.git.status();
-      if (preStatus.files.length > 0) {
-        this.options.logger.warn(`⚠️  Found ${preStatus.files.length} uncommitted changes before PR creation`);
-        this.options.logger.info('📝 Adding and committing remaining changes...');
-        
+      const uncommittedCount = preStatus.files.length;
+      const modifiedCount = preStatus.modified.length;
+      const createdCount = preStatus.created.length;
+      const deletedCount = preStatus.deleted.length;
+
+      if (uncommittedCount > 0) {
+        this.options.logger.warn(
+          `⚠️  Found ${uncommittedCount} uncommitted changes before PR creation`
+        );
+        this.options.logger.info(
+          `📊 Changes breakdown: ${modifiedCount} modified, ${createdCount} created, ${deletedCount} deleted`
+        );
+        this.options.logger.info(
+          '📝 Adding and committing remaining changes...'
+        );
+
         // Stage all remaining changes
         await this.git.add('.');
-        
+
         // Create an additional commit for these changes
-        const additionalCommitMessage = `chore: Add remaining changes for task ${task.id}\n\nThese files were modified but not included in the initial commit.`;
+        const additionalCommitMessage = `chore: Add remaining changes for task ${task.id}\n\nThese files were modified but not included in the initial commit:\n- ${modifiedCount} modified files\n- ${createdCount} new files\n- ${deletedCount} deleted files`;
         await this.git.commit(additionalCommitMessage);
-        
+
         this.options.logger.info('✅ Additional changes committed');
+
+        // Update the task result to reflect all changes
+        if (result.filesChanged) {
+          const allChangedFiles = await this.getChangedFiles();
+          result.filesChanged = [
+            ...new Set([...result.filesChanged, ...allChangedFiles])
+          ];
+        }
       }
 
       // Ensure branch is pushed before creating PR
       if (this.options.autoPush) {
         await this.pushTaskBranch(task);
       } else {
-        this.options.logger.warn('⚠️  Auto-push is disabled. Ensure branch is pushed before PR creation.');
+        this.options.logger.warn(
+          '⚠️  Auto-push is disabled. Ensure branch is pushed before PR creation.'
+        );
       }
 
       const prTitle = `[Task ${task.id}] ${task.title}`;
@@ -626,11 +795,16 @@ node_modules/
 
       // Create PR using GitHub CLI
       const cmdResult = await this.executeCommand('gh', [
-        'pr', 'create',
-        '--title', prTitle,
-        '--body', prBody,
-        '--base', taskBranchInfo.baseBranch,
-        '--head', taskBranchInfo.branchName
+        'pr',
+        'create',
+        '--title',
+        prTitle,
+        '--body',
+        prBody,
+        '--base',
+        taskBranchInfo.baseBranch,
+        '--head',
+        taskBranchInfo.branchName
       ]);
 
       if (cmdResult.code === 0) {
@@ -652,7 +826,9 @@ node_modules/
         throw new Error(cmdResult.stderr);
       }
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to create task pull request: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to create task pull request: ${error.message}`
+      );
       // Don't throw error, as this is not critical
     }
   }
@@ -689,7 +865,7 @@ node_modules/
 
     if (task.acceptance_criteria && task.acceptance_criteria.length > 0) {
       body.push('## Acceptance Criteria');
-      task.acceptance_criteria.forEach(criteria => {
+      task.acceptance_criteria.forEach((criteria) => {
         body.push(`- [x] ${criteria}`);
       });
       body.push('');
@@ -698,7 +874,11 @@ node_modules/
     if (result.filesChanged && result.filesChanged.length > 0) {
       body.push('## Changes');
       body.push(`- **Files modified**: ${result.filesChanged.length}`);
-      body.push(`- **Files**: ${result.filesChanged.slice(0, 10).join(', ')}${result.filesChanged.length > 10 ? '...' : ''}`);
+      body.push(
+        `- **Files**: ${result.filesChanged.slice(0, 10).join(', ')}${
+          result.filesChanged.length > 10 ? '...' : ''
+        }`
+      );
       body.push('');
     }
 
@@ -714,7 +894,11 @@ node_modules/
     body.push('---');
     body.push('🤖 Automated PR by Nightly Code Orchestrator');
     body.push(`**Task ID**: ${task.id}`);
-    body.push(`**Duration**: ${Math.round((result.duration || 0) / TIME.MS.ONE_SECOND)}s`);
+    body.push(
+      `**Duration**: ${Math.round(
+        (result.duration || 0) / TIME.MS.ONE_SECOND
+      )}s`
+    );
     body.push(`**Generated**: ${new Date().toISOString()}`);
 
     return body.join('\n');
@@ -722,8 +906,12 @@ node_modules/
 
   async createSessionPR (sessionResults) {
     if (this.options.dryRun) {
-      this.options.logger.info('🔄 Dry run mode - would create session pull request');
-      this.options.logger.info(`   └─ Title: Coding Session: ${sessionResults.completedTasks} tasks completed`);
+      this.options.logger.info(
+        '🔄 Dry run mode - would create session pull request'
+      );
+      this.options.logger.info(
+        `   └─ Title: Coding Session: ${sessionResults.completedTasks} tasks completed`
+      );
       return 'https://github.com/example/repo/pull/dry-run';
     }
 
@@ -731,7 +919,9 @@ node_modules/
       // Check if GitHub CLI is available
       const hasGhCli = await this.checkGitHubCLI();
       if (!hasGhCli) {
-        this.options.logger.warn('⚠️  GitHub CLI not available, skipping PR creation');
+        this.options.logger.warn(
+          '⚠️  GitHub CLI not available, skipping PR creation'
+        );
         return;
       }
 
@@ -742,17 +932,29 @@ node_modules/
 
       // Check for any uncommitted changes before creating PR
       const preStatus = await this.git.status();
-      if (preStatus.files.length > 0) {
-        this.options.logger.warn(`⚠️  Found ${preStatus.files.length} uncommitted changes before session PR creation`);
-        this.options.logger.info('📝 Adding and committing remaining session changes...');
-        
+      const uncommittedCount = preStatus.files.length;
+      const modifiedCount = preStatus.modified.length;
+      const createdCount = preStatus.created.length;
+      const deletedCount = preStatus.deleted.length;
+
+      if (uncommittedCount > 0) {
+        this.options.logger.warn(
+          `⚠️  Found ${uncommittedCount} uncommitted changes before session PR creation`
+        );
+        this.options.logger.info(
+          `📊 Changes breakdown: ${modifiedCount} modified, ${createdCount} created, ${deletedCount} deleted`
+        );
+        this.options.logger.info(
+          '📝 Adding and committing remaining session changes...'
+        );
+
         // Stage all remaining changes
         await this.git.add('.');
-        
+
         // Create an additional commit for these changes
-        const additionalCommitMessage = `chore: Add remaining changes for session ${this.sessionBranch.sessionId}\n\nThese files were modified but not included in task commits.`;
+        const additionalCommitMessage = `chore: Add remaining changes for session ${this.sessionBranch.sessionId}\n\nThese files were modified but not included in task commits:\n- ${modifiedCount} modified files\n- ${createdCount} new files\n- ${deletedCount} deleted files`;
         await this.git.commit(additionalCommitMessage);
-        
+
         this.options.logger.info('✅ Additional session changes committed');
       }
 
@@ -763,11 +965,16 @@ node_modules/
 
       // Create PR using GitHub CLI
       const result = await this.executeCommand('gh', [
-        'pr', 'create',
-        '--title', prTitle,
-        '--body', prBody,
-        '--base', this.originalBranch,
-        '--head', this.sessionBranch.branchName
+        'pr',
+        'create',
+        '--title',
+        prTitle,
+        '--body',
+        prBody,
+        '--base',
+        this.originalBranch,
+        '--head',
+        this.sessionBranch.branchName
       ]);
 
       if (result.code === 0) {
@@ -779,7 +986,9 @@ node_modules/
         throw new Error(result.stderr);
       }
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to create session pull request: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to create session pull request: ${error.message}`
+      );
       // Don't throw error, as this is not critical
     }
   }
@@ -788,7 +997,9 @@ node_modules/
     const body = [];
 
     body.push('## Session Summary');
-    body.push(`Completed ${sessionResults.completedTasks} out of ${sessionResults.totalTasks} tasks in this coding session.`);
+    body.push(
+      `Completed ${sessionResults.completedTasks} out of ${sessionResults.totalTasks} tasks in this coding session.`
+    );
     body.push('');
 
     if (sessionResults.tasks && sessionResults.tasks.length > 0) {
@@ -797,12 +1008,18 @@ node_modules/
         if (task.status === 'completed') {
           body.push(`### ${index + 1}. ${task.title}`);
           if (task.result && task.result.filesChanged) {
-            body.push(`**Files changed:** ${task.result.filesChanged.join(', ')}`);
+            body.push(
+              `**Files changed:** ${task.result.filesChanged.join(', ')}`
+            );
           }
 
           // Show task ID from commit convention
-          body.push(`**Task ID:** \`${task.id}\` (tracked via commit convention)`);
-          body.push(`**Commits:** Look for \`[task:${task.id}]\` in commit messages`);
+          body.push(
+            `**Task ID:** \`${task.id}\` (tracked via commit convention)`
+          );
+          body.push(
+            `**Commits:** Look for \`[task:${task.id}]\` in commit messages`
+          );
 
           body.push('');
         }
@@ -811,7 +1028,7 @@ node_modules/
 
     if (sessionResults.failedTasks && sessionResults.failedTasks.length > 0) {
       body.push('## Failed Tasks');
-      sessionResults.failedTasks.forEach(task => {
+      sessionResults.failedTasks.forEach((task) => {
         body.push(`- ${task.title} (${task.error || 'Unknown error'})`);
       });
       body.push('');
@@ -833,9 +1050,13 @@ node_modules/
     body.push('');
 
     body.push('---');
-    body.push('🤖 This PR was automatically generated by Nightly Code Orchestrator');
+    body.push(
+      '🤖 This PR was automatically generated by Nightly Code Orchestrator'
+    );
     body.push(`**Session ID:** ${sessionResults.sessionId}`);
-    body.push(`**Duration:** ${Math.round(sessionResults.duration / 60000)} minutes`);
+    body.push(
+      `**Duration:** ${Math.round(sessionResults.duration / 60000)} minutes`
+    );
     body.push(`**Generated:** ${new Date().toISOString()}`);
 
     return body.join('\\n');
@@ -857,7 +1078,7 @@ node_modules/
 
     if (task.acceptance_criteria && task.acceptance_criteria.length > 0) {
       body.push('## Acceptance Criteria');
-      task.acceptance_criteria.forEach(criteria => {
+      task.acceptance_criteria.forEach((criteria) => {
         body.push(`- [x] ${criteria}`);
       });
       body.push('');
@@ -865,7 +1086,7 @@ node_modules/
 
     if (result.filesChanged && result.filesChanged.length > 0) {
       body.push('## Files Changed');
-      result.filesChanged.forEach(file => {
+      result.filesChanged.forEach((file) => {
         body.push(`- \`${file}\``);
       });
       body.push('');
@@ -881,9 +1102,15 @@ node_modules/
     body.push('');
 
     body.push('---');
-    body.push('🤖 This PR was automatically generated by Nightly Code Orchestrator');
+    body.push(
+      '🤖 This PR was automatically generated by Nightly Code Orchestrator'
+    );
     body.push(`**Task ID:** ${task.id}`);
-    body.push(`**Duration:** ${Math.round((result.duration || 0) / TIME.MS.ONE_SECOND)}s`);
+    body.push(
+      `**Duration:** ${Math.round(
+        (result.duration || 0) / TIME.MS.ONE_SECOND
+      )}s`
+    );
     body.push(`**Generated:** ${new Date().toISOString()}`);
 
     return body.join('\\n');
@@ -900,7 +1127,9 @@ node_modules/
 
   async revertTaskChanges (task) {
     if (this.options.dryRun) {
-      this.options.logger.info(`🔄 Dry run mode - would revert task changes for: ${task.title}`);
+      this.options.logger.info(
+        `🔄 Dry run mode - would revert task changes for: ${task.title}`
+      );
       return;
     }
 
@@ -911,30 +1140,43 @@ node_modules/
       const currentBranch = await this.getCurrentBranch();
 
       // Ensure we're on the main branch and it's up to date
-      this.options.logger.info(`🌟 Switching back to ${this.originalBranch}...`);
+      this.options.logger.info(
+        `🌟 Switching back to ${this.originalBranch}...`
+      );
       await this.git.checkout(this.originalBranch);
       await this.pullLatestChanges();
 
       // Delete the task branch if it exists
       try {
         const branches = await this.git.branchLocal();
-        if (branches.all.includes(currentBranch) && currentBranch !== this.originalBranch) {
-          this.options.logger.info(`🗑️  Deleting failed task branch: ${currentBranch}`);
+        if (
+          branches.all.includes(currentBranch) &&
+          currentBranch !== this.originalBranch
+        ) {
+          this.options.logger.info(
+            `🗑️  Deleting failed task branch: ${currentBranch}`
+          );
           await this.git.deleteLocalBranch(currentBranch, true);
           this.options.logger.info('✅ Task branch deleted successfully');
         }
       } catch (branchError) {
-        this.options.logger.warn(`⚠️  Failed to delete task branch: ${branchError.message}`);
+        this.options.logger.warn(
+          `⚠️  Failed to delete task branch: ${branchError.message}`
+        );
       }
 
       // Remove from session branches
       this.sessionBranches = this.sessionBranches.filter(
-        branch => branch.taskId !== task.id
+        (branch) => branch.taskId !== task.id
       );
 
-      this.options.logger.info(`✨ Task changes reverted, back on ${this.originalBranch}`);
+      this.options.logger.info(
+        `✨ Task changes reverted, back on ${this.originalBranch}`
+      );
     } catch (error) {
-      this.options.logger.error(`❌ Failed to revert task changes: ${error.message}`);
+      this.options.logger.error(
+        `❌ Failed to revert task changes: ${error.message}`
+      );
       // Don't throw error, as we want to continue with other tasks
     }
   }
@@ -943,17 +1185,33 @@ node_modules/
     try {
       const status = await this.git.status();
 
+      // Collect all types of changes
       const changedFiles = [
         ...status.modified,
         ...status.created,
         ...status.deleted,
-        ...status.renamed.map(r => r.to),
-        ...status.staged
+        ...status.renamed.map((r) => r.to),
+        ...status.renamed.map((r) => r.from), // Include both sides of renames
+        ...status.staged,
+        ...status.not_added // Include untracked files that are not staged
       ];
 
-      return [...new Set(changedFiles)]; // Remove duplicates
+      // Remove duplicates and filter out undefined/null values
+      const uniqueFiles = [...new Set(changedFiles)].filter((file) => file);
+
+      if (uniqueFiles.length > 0) {
+        this.options.logger.debug(
+          `📁 Found ${uniqueFiles.length} changed files: ${uniqueFiles
+            .slice(0, 5)
+            .join(', ')}${uniqueFiles.length > 5 ? '...' : ''}`
+        );
+      }
+
+      return uniqueFiles;
     } catch (error) {
-      this.options.logger.warn('Failed to get changed files', { error: error.message });
+      this.options.logger.warn('Failed to get changed files', {
+        error: error.message
+      });
       return [];
     }
   }
@@ -963,7 +1221,9 @@ node_modules/
       const status = await this.git.status();
       return status.current;
     } catch (error) {
-      this.options.logger.warn('Failed to get current branch', { error: error.message });
+      this.options.logger.warn('Failed to get current branch', {
+        error: error.message
+      });
       return 'unknown';
     }
   }
@@ -980,7 +1240,7 @@ node_modules/
 
       const log = await this.git.log(options);
 
-      return log.all.map(commit => ({
+      return log.all.map((commit) => ({
         hash: commit.hash,
         message: commit.message,
         author: commit.author_name,
@@ -988,16 +1248,22 @@ node_modules/
         files: commit.diff?.files || []
       }));
     } catch (error) {
-      this.options.logger.warn('Failed to get commit history', { error: error.message });
+      this.options.logger.warn('Failed to get commit history', {
+        error: error.message
+      });
       return [];
     }
   }
 
   async createSessionSummaryCommit (sessionResults) {
     if (this.options.dryRun) {
-      this.options.logger.info('🔄 Dry run mode - would create session summary commit');
+      this.options.logger.info(
+        '🔄 Dry run mode - would create session summary commit'
+      );
       this.options.logger.info(`   └─ Session: ${sessionResults.sessionId}`);
-      this.options.logger.info(`   └─ Completed: ${sessionResults.completedTasks}/${sessionResults.totalTasks} tasks`);
+      this.options.logger.info(
+        `   └─ Completed: ${sessionResults.completedTasks}/${sessionResults.totalTasks} tasks`
+      );
       return;
     }
 
@@ -1009,10 +1275,17 @@ node_modules/
       await this.pullLatestChanges();
 
       // Create session summary file
-      const summaryPath = path.join(this.options.workingDir, '.nightly-code', 'session-summaries');
+      const summaryPath = path.join(
+        this.options.workingDir,
+        '.nightly-code',
+        'session-summaries'
+      );
       await fs.ensureDir(summaryPath);
 
-      const summaryFile = path.join(summaryPath, `${sessionResults.sessionId}.json`);
+      const summaryFile = path.join(
+        summaryPath,
+        `${sessionResults.sessionId}.json`
+      );
       await fs.writeJson(summaryFile, sessionResults, { spaces: 2 });
 
       this.options.logger.info('📝 Adding session summary to commit...');
@@ -1040,13 +1313,17 @@ All successful tasks merged to main
             this.options.logger.info('✅ Session summary pushed to remote');
           }
         } catch (pushError) {
-          this.options.logger.warn(`⚠️  Failed to push session summary: ${pushError.message}`);
+          this.options.logger.warn(
+            `⚠️  Failed to push session summary: ${pushError.message}`
+          );
         }
       }
 
       this.options.logger.info('✅ Session summary committed to main');
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to create session summary commit: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to create session summary commit: ${error.message}`
+      );
     }
   }
 
@@ -1065,16 +1342,22 @@ All successful tasks merged to main
       if (this.options.prStrategy === 'task') {
         // Clean up task branches
         if (this.taskBranches.size > 0) {
-          this.options.logger.info(`🧹 Cleaning up ${this.taskBranches.size} task branches...`);
+          this.options.logger.info(
+            `🧹 Cleaning up ${this.taskBranches.size} task branches...`
+          );
 
           for (const [, branchInfo] of this.taskBranches) {
             try {
               if (branches.all.includes(branchInfo.branchName)) {
-                this.options.logger.info(`🗑️  Deleting task branch: ${branchInfo.branchName}`);
+                this.options.logger.info(
+                  `🗑️  Deleting task branch: ${branchInfo.branchName}`
+                );
                 await this.git.deleteLocalBranch(branchInfo.branchName, true);
               }
             } catch (error) {
-              this.options.logger.warn(`⚠️  Failed to cleanup branch ${branchInfo.branchName}: ${error.message}`);
+              this.options.logger.warn(
+                `⚠️  Failed to cleanup branch ${branchInfo.branchName}: ${error.message}`
+              );
             }
           }
 
@@ -1086,12 +1369,19 @@ All successful tasks merged to main
       } else {
         // Legacy behavior: clean up session branch
         if (this.sessionBranch) {
-          this.options.logger.info(`🧹 Cleaning up session branch: ${this.sessionBranch.branchName}`);
+          this.options.logger.info(
+            `🧹 Cleaning up session branch: ${this.sessionBranch.branchName}`
+          );
 
           if (branches.all.includes(this.sessionBranch.branchName)) {
             // Delete session branch (it should now be in a PR)
-            this.options.logger.info(`🗑️  Deleting session branch: ${this.sessionBranch.branchName}`);
-            await this.git.deleteLocalBranch(this.sessionBranch.branchName, true);
+            this.options.logger.info(
+              `🗑️  Deleting session branch: ${this.sessionBranch.branchName}`
+            );
+            await this.git.deleteLocalBranch(
+              this.sessionBranch.branchName,
+              true
+            );
             this.options.logger.info('✅ Session branch deleted successfully');
           }
 
@@ -1104,23 +1394,31 @@ All successful tasks merged to main
 
       // Handle legacy session branches if any exist
       if (this.sessionBranches.length > 0) {
-        this.options.logger.info(`🧹 Cleaning up ${this.sessionBranches.length} legacy task branches...`);
+        this.options.logger.info(
+          `🧹 Cleaning up ${this.sessionBranches.length} legacy task branches...`
+        );
 
         for (const branchInfo of this.sessionBranches) {
           try {
             if (branches.all.includes(branchInfo.branchName)) {
-              this.options.logger.info(`🗑️  Deleting legacy branch: ${branchInfo.branchName}`);
+              this.options.logger.info(
+                `🗑️  Deleting legacy branch: ${branchInfo.branchName}`
+              );
               await this.git.deleteLocalBranch(branchInfo.branchName, true);
             }
           } catch (error) {
-            this.options.logger.warn(`⚠️  Failed to cleanup branch ${branchInfo.branchName}: ${error.message}`);
+            this.options.logger.warn(
+              `⚠️  Failed to cleanup branch ${branchInfo.branchName}: ${error.message}`
+            );
           }
         }
 
         this.sessionBranches = [];
       }
     } catch (error) {
-      this.options.logger.warn(`⚠️  Failed to cleanup branches: ${error.message}`);
+      this.options.logger.warn(
+        `⚠️  Failed to cleanup branches: ${error.message}`
+      );
     }
   }
 
@@ -1168,7 +1466,9 @@ All successful tasks merged to main
         behind: status.behind || 0
       };
     } catch (error) {
-      this.options.logger.warn('Failed to get repository info', { error: error.message });
+      this.options.logger.warn('Failed to get repository info', {
+        error: error.message
+      });
       return null;
     }
   }

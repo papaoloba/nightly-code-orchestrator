@@ -39,7 +39,7 @@ class Validator {
       }).default(),
 
       git: Joi.object({
-        branch_prefix: Joi.string().pattern(/^[a-zA-Z0-9-_]+$/).default('nightly-'),
+        branch_prefix: Joi.string().pattern(/^[a-zA-Z0-9-_]+$/).default('nightly/'),
         auto_push: Joi.boolean().default(true),
         create_pr: Joi.boolean().default(true),
         pr_template: Joi.string().allow('').default(''),
