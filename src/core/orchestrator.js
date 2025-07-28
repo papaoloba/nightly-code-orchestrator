@@ -1414,7 +1414,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
       const child = spawn('claude', args, {
         cwd: options.workingDir || this.options.workingDir,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe']
       });
 
       this.state.claudeProcess = child;
