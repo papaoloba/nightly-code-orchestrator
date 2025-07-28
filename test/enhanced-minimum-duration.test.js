@@ -53,7 +53,7 @@ describe('Enhanced Minimum Duration with Session Continuity', () => {
     // Don't mock these methods, test the real implementation
     orchestrator.gatherProjectContext = jest.fn().mockResolvedValue('Mock project context');
     orchestrator.gatherTaskContext = jest.fn().mockResolvedValue('Mock task context');
-    
+
     // Restore Date.now after tests
     afterEach(() => {
       Date.now = originalDateNow;

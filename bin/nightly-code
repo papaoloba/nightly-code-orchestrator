@@ -158,10 +158,10 @@ program
       });
 
       const sessionType = options.dryRun ? 'dry-run validation' : 'coding session';
-      
+
       // Enable quiet mode since orchestrator uses pretty logger
       spinner.setQuietMode(true);
-      
+
       const result = await spinner.execute(
         `Starting ${sessionType}...`,
         orchestrator.run(),
@@ -287,7 +287,7 @@ program
 
       // Enable quiet mode to work with pretty logger
       spinner.setQuietMode(true);
-      
+
       const result = await spinner.execute(
         'Validating configuration...',
         validator.validateAll(),

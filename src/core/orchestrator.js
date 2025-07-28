@@ -18,6 +18,7 @@ const {
 } = require('../integrations/superclaude-optimization-guide');
 const { TIME, STORAGE, RETRY } = require('../utils/constants');
 const PrettyLogger = require('../utils/pretty-logger');
+const spinner = require('../utils/spinner');
 
 /**
  * Main orchestrator for nightly-claude-code automation
@@ -1356,107 +1357,125 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   }
 
   async executeClaudeCode (prompt, options = {}) {
-    // Inform user that Claude Code is starting
-    this.logInfo('🤖 Claude Code is running...');
+    // Start spinner for Claude Code execution
+    spinner.start('🤖 Claude Code is starting...', 'dots12');
 
-    // Log the original prompt
-    this.logPrompt(prompt, 'Original');
+    try {
+      // Inform user that Claude Code is starting
+      this.logInfo('🤖 Claude Code is running...');
 
-    // Check if SuperClaude mode is active and optimize prompt
-    if (
-      this.superclaudeConfig?.enabled &&
-      this.superclaudeIntegration?.isEnabled()
-    ) {
-      prompt = await this.optimizePromptWithSuperClaude(prompt);
-    }
+      // Log the original prompt
+      this.logPrompt(prompt, 'Original');
 
-    // Check if rate limiting is enabled
-    if (!this.options.enableRetryOnLimits) {
-      return await this.executeClaudeCodeSingle(prompt, options);
-    }
+      // Check if SuperClaude mode is active and optimize prompt
+      if (
+        this.superclaudeConfig?.enabled &&
+        this.superclaudeIntegration?.isEnabled()
+      ) {
+        spinner.update('🧠 Optimizing prompt with SuperClaude...');
+        prompt = await this.optimizePromptWithSuperClaude(prompt);
+      }
 
-    const maxRetries = options.maxRetries || this.options.rateLimitRetries || 5;
-    const baseDelay =
+      spinner.update('⚡ Executing Claude Code task...');
+
+      // Check if rate limiting is enabled
+      if (!this.options.enableRetryOnLimits) {
+        const result = await this.executeClaudeCodeSingle(prompt, options);
+        spinner.succeed('✅ Claude Code task completed successfully');
+        return result;
+      }
+
+      const maxRetries = options.maxRetries || this.options.rateLimitRetries || 5;
+      const baseDelay =
       options.baseDelay ||
       this.options.rateLimitBaseDelay ||
       TIME.MS.RATE_LIMIT_BASE_DELAY;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const result = await this.executeClaudeCodeSingle(prompt, options);
-        return result;
-      } catch (error) {
-        const errorType = this.classifyError(error);
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await this.executeClaudeCodeSingle(prompt, options);
+          spinner.succeed('✅ Claude Code task completed successfully');
+          return result;
+        } catch (error) {
+          const errorType = this.classifyError(error);
 
-        if (errorType === 'RATE_LIMIT' && this.options.rateLimitRetries > 0) {
-          if (attempt < maxRetries) {
-            const delay = this.calculateBackoffDelay(
-              attempt,
-              baseDelay,
-              errorType
-            );
-            this.logWarn(
-              `🔄 Rate limit encountered. Waiting ${Math.round(
-                delay / TIME.MS.ONE_SECOND
-              )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
-            );
+          if (errorType === 'RATE_LIMIT' && this.options.rateLimitRetries > 0) {
+            if (attempt < maxRetries) {
+              const delay = this.calculateBackoffDelay(
+                attempt,
+                baseDelay,
+                errorType
+              );
+              this.logWarn(
+                `🔄 Rate limit encountered. Waiting ${Math.round(
+                  delay / TIME.MS.ONE_SECOND
+                )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
+              );
 
-            // Keep session alive during wait
-            await this.waitWithProgress(delay, errorType);
-            continue;
-          } else {
-            this.logError(
-              `💥 Rate limit exceeded maximum retry attempts (${maxRetries})`
-            );
-            throw new Error(`Rate limit exceeded after ${maxRetries} retries`);
-          }
-        } else if (
-          errorType === 'USAGE_LIMIT' &&
+              spinner.update(`⏳ Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry...`);
+              // Keep session alive during wait
+              await this.waitWithProgress(delay, errorType);
+              spinner.update('🔄 Retrying Claude Code task...');
+              continue;
+            } else {
+              this.logError(
+                `💥 Rate limit exceeded maximum retry attempts (${maxRetries})`
+              );
+              throw new Error(`Rate limit exceeded after ${maxRetries} retries`);
+            }
+          } else if (
+            errorType === 'USAGE_LIMIT' &&
           this.options.usageLimitRetry
-        ) {
-          if (attempt < maxRetries) {
-            const delay = this.calculateBackoffDelay(
-              attempt,
-              baseDelay,
-              errorType
-            );
-            this.logWarn(
-              `🔄 Usage limit encountered. Waiting ${Math.round(
-                delay / TIME.MS.ONE_SECOND
-              )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
-            );
+          ) {
+            if (attempt < maxRetries) {
+              const delay = this.calculateBackoffDelay(
+                attempt,
+                baseDelay,
+                errorType
+              );
+              this.logWarn(
+                `🔄 Usage limit encountered. Waiting ${Math.round(
+                  delay / TIME.MS.ONE_SECOND
+                )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
+              );
 
-            // Keep session alive during wait
-            await this.waitWithProgress(delay, errorType);
-            continue;
-          } else {
-            this.logError(
-              `💥 Usage limit exceeded maximum retry attempts (${maxRetries})`
-            );
-            throw new Error(`Usage limit exceeded after ${maxRetries} retries`);
-          }
-        } else if (errorType === 'TIMEOUT') {
+              spinner.update(`⏳ Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry...`);
+              // Keep session alive during wait
+              await this.waitWithProgress(delay, errorType);
+              spinner.update('🔄 Retrying Claude Code task...');
+              continue;
+            } else {
+              this.logError(
+                `💥 Usage limit exceeded maximum retry attempts (${maxRetries})`
+              );
+              throw new Error(`Usage limit exceeded after ${maxRetries} retries`);
+            }
+          } else if (errorType === 'TIMEOUT') {
           // Don't retry timeouts, they're usually task-specific
-          throw error;
-        } else if (errorType === 'FATAL') {
-          // Don't retry fatal errors
-          throw error;
-        } else {
-          // For other errors, retry with shorter delay
-          if (attempt < Math.min(maxRetries, 2)) {
-            const delay = RETRY.GENERAL_ERROR_DELAY;
-            this.logWarn(
-              `⚠️  Execution failed, retrying in ${
-                delay / TIME.MS.ONE_SECOND
-              }s (attempt ${attempt + 1}/${maxRetries})...`
-            );
-            await this.sleep(delay);
-            continue;
-          } else {
             throw error;
+          } else if (errorType === 'FATAL') {
+          // Don't retry fatal errors
+            throw error;
+          } else {
+          // For other errors, retry with shorter delay
+            if (attempt < Math.min(maxRetries, 2)) {
+              const delay = RETRY.GENERAL_ERROR_DELAY;
+              this.logWarn(
+                `⚠️  Execution failed, retrying in ${
+                  delay / TIME.MS.ONE_SECOND
+                }s (attempt ${attempt + 1}/${maxRetries})...`
+              );
+              await this.sleep(delay);
+              continue;
+            } else {
+              throw error;
+            }
           }
         }
       }
+    } catch (error) {
+      spinner.fail('❌ Claude Code task failed');
+      throw error;
     }
   }
 
@@ -1556,6 +1575,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   async executeClaudeCodeWithSession (prompt, options = {}) {
     return new Promise((resolve, reject) => {
       this.logInfo('⚙️  Executing Claude Code with session management...');
+      spinner.update('🔗 Starting new Claude Code session...');
 
       // Use JSON output format to capture session metadata
       const args = [
@@ -1669,6 +1689,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   async executeClaudeCodeContinuation (prompt, options = {}) {
     return new Promise((resolve, reject) => {
       this.logInfo('⚙️  Continuing Claude Code session...');
+      spinner.update('🔗 Continuing Claude Code session...');
 
       // Use -c flag to continue the most recent session
       const args = [
@@ -1976,9 +1997,33 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  logPrompt () {
-    // Removed fuchsia box logging - now this method does nothing
-    // This keeps the method calls intact but removes the visual output
+  logPrompt (prompt, label = 'Prompt') {
+    // Log prompts with clear visual separation for SuperClaude integration
+    if (!prompt) return;
+
+    const maxLength = 500; // Truncate very long prompts
+    const displayPrompt = prompt.length > maxLength
+      ? `${prompt.substring(0, maxLength)}...`
+      : prompt;
+
+    // Use different colors for different prompt types
+    let color = '\x1b[36m'; // cyan default
+    if (label === 'SuperClaude Optimized') {
+      color = '\x1b[35m'; // magenta for optimized prompts
+    } else if (label === 'Original') {
+      color = '\x1b[33m'; // yellow for original prompts
+    }
+
+    this.logger.info(`${color}📝 ${label} Prompt:\x1b[0m`);
+    this.logger.info(`${color}┌${'─'.repeat(Math.min(displayPrompt.length + 2, 80))}┐\x1b[0m`);
+
+    // Split long prompts into multiple lines
+    const lines = displayPrompt.match(/.{1,76}/g) || [displayPrompt];
+    lines.forEach(line => {
+      this.logger.info(`${color}│ ${line.padEnd(76)} │\x1b[0m`);
+    });
+
+    this.logger.info(`${color}└${'─'.repeat(Math.min(displayPrompt.length + 2, 80))}┘\x1b[0m`);
   }
 
   async generateIterativeTaskPrompt (
