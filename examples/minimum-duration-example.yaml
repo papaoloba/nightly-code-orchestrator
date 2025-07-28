@@ -1,6 +1,6 @@
-# Example demonstrating the new minimum_duration parameter
-# This parameter forces the orchestrator to iteratively prompt Claude
-# about the same task until the minimum duration is reached
+# Example demonstrating the enhanced minimum_duration parameter
+# This parameter uses Claude Code's -c/--continue flag for session continuity
+# during iterative prompting until the minimum duration is reached
 
 version: "1.0"
 created_at: "2025-01-28T00:00:00Z"
@@ -31,15 +31,16 @@ tasks:
     title: "Task With Minimum Duration (Iterative)"
     requirements: |
       This task has a minimum_duration of 30 minutes.
-      The orchestrator will continue prompting Claude to work on this task
-      in iterations until at least 30 minutes have elapsed.
+      The orchestrator will use Claude Code's session continuity (--continue flag)
+      to maintain conversation context across iterations until at least 30 minutes have elapsed.
       
       Each iteration will:
-      - Build upon previous work
-      - Improve implementation
-      - Add features or enhancements
-      - Refine code quality
-      - Enhance documentation
+      - Continue naturally from the previous conversation
+      - Build upon previous work with full context
+      - Improve implementation progressively
+      - Add features or enhancements iteratively
+      - Refine code quality continuously
+      - Enhance documentation comprehensively
     
     acceptance_criteria:
       - "Feature is implemented"
@@ -62,12 +63,13 @@ tasks:
       This is a complex refactoring task that benefits from
       multiple iterations of improvement.
       
-      The minimum_duration of 60 minutes ensures Claude will:
-      - Thoroughly analyze the codebase
-      - Implement refactoring in phases
-      - Continuously improve the implementation
-      - Add comprehensive tests
-      - Document changes thoroughly
+      The minimum_duration of 60 minutes with session continuity ensures Claude will:
+      - Maintain conversation context across all iterations
+      - Thoroughly analyze the codebase with cumulative understanding
+      - Implement refactoring in progressive phases
+      - Continuously improve the implementation with full context
+      - Add comprehensive tests building on previous iterations
+      - Document changes with complete understanding of all changes
     
     acceptance_criteria:
       - "Code is properly refactored"

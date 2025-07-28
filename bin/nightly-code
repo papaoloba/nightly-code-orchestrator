@@ -9,6 +9,7 @@ const { Orchestrator } = require('../src/core/orchestrator');
 const { Reporter } = require('../src/utils/reporter');
 const { Validator } = require('../src/utils/validator');
 const { TaskDescriptor } = require('../src/core/task-descriptor');
+const spinner = require('../src/utils/spinner');
 const packageJson = require('../package.json');
 
 // File-scoped logging methods
@@ -43,42 +44,46 @@ program
   .option('--superclaude', 'Enable SuperClaude Framework integration')
   .action(async (options) => {
     try {
-      log.info('🚀 Initializing Nightly Code configuration...');
-
       const configPath = path.join(process.cwd(), 'nightly-code.yaml');
       const tasksPath = path.join(process.cwd(), 'nightly-tasks.yaml');
 
+      // Check for existing configuration
       if (!options.force && (await fs.pathExists(configPath) || await fs.pathExists(tasksPath))) {
         log.error('Configuration already exists. Use --force to overwrite.');
         process.exit(1);
       }
 
-      // Copy templates based on project type
-      const templateDir = path.join(__dirname, '..', 'templates');
-      await fs.copy(path.join(templateDir, 'session-config.yaml'), configPath);
-      await fs.copy(path.join(templateDir, 'task-template.yaml'), tasksPath);
+      // Initialize with spinner
+      await spinner.execute(
+        'Initializing Nightly Code configuration...',
+        async () => {
+          const templateDir = path.join(__dirname, '..', 'templates');
+          await fs.copy(path.join(templateDir, 'session-config.yaml'), configPath);
+          await fs.copy(path.join(templateDir, 'task-template.yaml'), tasksPath);
 
-      // Add SuperClaude configuration if requested
-      if (options.superclaude) {
-        const YAML = require('yaml');
-        const configContent = await fs.readFile(configPath, 'utf8');
-        const config = YAML.parse(configContent);
+          // Add SuperClaude configuration if requested
+          if (options.superclaude) {
+            spinner.update('Configuring SuperClaude integration...');
+            const YAML = require('yaml');
+            const configContent = await fs.readFile(configPath, 'utf8');
+            const config = YAML.parse(configContent);
 
-        // Add SuperClaude configuration section
-        config.superclaude = {
-          enabled: true,
-          // commands_path: './superclaude/commands/sc', // Optional: if not specified, assumes global SuperClaude commands
-          planning_mode: 'intelligent',
-          execution_mode: 'assisted',
-          task_management: 'hierarchical',
-          integration_level: 'deep'
-        };
+            config.superclaude = {
+              enabled: true,
+              planning_mode: 'intelligent',
+              execution_mode: 'assisted',
+              task_management: 'hierarchical',
+              integration_level: 'deep'
+            };
 
-        await fs.writeFile(configPath, YAML.stringify(config));
-        log.success('✅ SuperClaude Framework integration enabled!');
-      }
+            await fs.writeFile(configPath, YAML.stringify(config));
+          }
+        },
+        {
+          successText: '✅ Configuration initialized successfully!'
+        }
+      );
 
-      log.success('✅ Configuration initialized successfully!');
       log.warn(`📝 Edit ${configPath} and ${tasksPath} to customize your setup`);
 
       if (options.superclaude) {
@@ -134,8 +139,6 @@ program
   .option('--task-pr', 'Use task-based PR strategy (one PR per task) - default')
   .action(async (options) => {
     try {
-      log.info('🎯 Starting coding session...');
-
       // Determine PR strategy from CLI flags
       let prStrategy;
       if (options.sessionPr) {
@@ -143,7 +146,6 @@ program
       } else if (options.taskPr) {
         prStrategy = 'task';
       }
-      // If neither flag is specified, will default to config or 'task'
 
       const orchestrator = new Orchestrator({
         configPath: options.config,
@@ -155,10 +157,20 @@ program
         prStrategy // Pass PR strategy if specified
       });
 
-      const result = await orchestrator.run();
+      const sessionType = options.dryRun ? 'dry-run validation' : 'coding session';
+      
+      // Enable quiet mode since orchestrator uses pretty logger
+      spinner.setQuietMode(true);
+      
+      const result = await spinner.execute(
+        `Starting ${sessionType}...`,
+        orchestrator.run(),
+        {
+          successText: options.dryRun ? '✅ Validation completed successfully!' : '✅ Session completed successfully!'
+        }
+      );
 
       if (result.success) {
-        log.success('✅ Session completed successfully!');
         log.info(`📊 Completed ${result.completedTasks}/${result.totalTasks} tasks`);
         log.info(`⏱️  Duration: ${Math.round(result.duration / 60000)} minutes`);
       } else {
@@ -179,7 +191,13 @@ program
   .action(async (options) => {
     try {
       const reporter = new Reporter();
-      const status = await reporter.getLastSessionStatus();
+      const status = await spinner.execute(
+        'Retrieving session status...',
+        reporter.getLastSessionStatus(),
+        {
+          successText: '📊 Status retrieved successfully'
+        }
+      );
 
       if (options.json) {
         log.json(status);
@@ -262,29 +280,37 @@ program
   .option('--fix', 'Attempt to fix common issues')
   .action(async (options) => {
     try {
-      log.info('🔍 Validating configuration...');
-
       const validator = new Validator({
         configPath: options.config,
         tasksPath: options.tasks
       });
 
-      const result = await validator.validateAll();
+      // Enable quiet mode to work with pretty logger
+      spinner.setQuietMode(true);
+      
+      const result = await spinner.execute(
+        'Validating configuration...',
+        validator.validateAll(),
+        {
+          successText: '✅ All validations passed!'
+        }
+      );
 
-      if (result.valid) {
-        log.success('✅ All validations passed!');
-      } else {
-        log.error('❌ Validation failed:');
+      if (!result.valid) {
+        spinner.fail('❌ Validation failed');
         result.errors.forEach(error => {
           log.plain(`  - ${error.message} (${error.path})`);
         });
 
         if (options.fix) {
-          log.warn('🔧 Attempting to fix issues...');
-          const fixResult = await validator.attemptFix(result.errors);
-          if (fixResult.fixed > 0) {
-            log.success(`✅ Fixed ${fixResult.fixed} issues`);
-          }
+          const fixResult = await spinner.execute(
+            'Attempting to fix issues...',
+            validator.attemptFix(result.errors),
+            {
+              successText: `✅ Fixed ${result.fixed || 0} issues`
+            }
+          );
+
           if (fixResult.remaining > 0) {
             log.warn(`⚠️  ${fixResult.remaining} issues require manual intervention`);
           }
@@ -417,12 +443,18 @@ program
       }
 
       // Process descriptions with automatic splitting
-      log.info(`\n🤖 Processing ${descriptions.length} task description(s) with auto-splitting...`);
+      const progress = spinner.createProgress([
+        'Processing task descriptions',
+        'Applying auto-splitting logic',
+        'Generating optimized tasks',
+        'Writing output file'
+      ]);
 
       // Track splitting results
       let totalTasks = 0;
       let splitCount = 0;
 
+      progress.next();
       let yamlContent;
 
       if (options.append && await fs.pathExists(options.output)) {

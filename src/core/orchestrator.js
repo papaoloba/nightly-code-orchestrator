@@ -1127,6 +1127,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     let totalFilesChanged = [];
     let iterationCount = 0;
     let taskCompleted = false;
+    let claudeSessionId = null; // Track Claude Code session for continuity
     const MAX_ITERATIONS = 50; // Safeguard against infinite loops
 
     try {
@@ -1140,7 +1141,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         };
       }
 
-      // Initial execution
+      // Enhanced iterative execution with session continuity
       do {
         iterationCount++;
 
@@ -1178,7 +1179,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
               ? `⏰ Elapsed: ${Math.round(
                 elapsedMs / TIME.MS.ONE_MINUTE
               )} minutes`
-              : ''
+              : '',
+            claudeSessionId
+              ? `🔗 Session: ${claudeSessionId.slice(0, 8)}...`
+              : '🆕 Starting new session'
           ]
             .filter(Boolean)
             .join('\n'),
@@ -1190,24 +1194,71 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
           }
         );
 
-        // Generate prompt for this iteration
-        const prompt = await this.generateIterativeTaskPrompt(
-          task,
-          iterationCount,
-          totalOutput,
-          totalFilesChanged
-        );
+        let result;
+        let prompt;
 
-        this.logInfo(
-          `⚡ Starting Claude Code execution (iteration ${iterationCount})...`
-        );
+        if (iterationCount === 1) {
+          // First iteration: Generate full prompt and establish session
+          prompt = await this.generateIterativeTaskPrompt(
+            task,
+            iterationCount,
+            totalOutput,
+            totalFilesChanged
+          );
 
-        // Execute Claude Code with the generated prompt
-        this.logInfo(`🔄 Running task iteration ${iterationCount} with Claude Code...`);
-        const result = await this.executeClaudeCode(prompt, {
-          timeout: iterationTimeoutMs,
-          workingDir: this.options.workingDir
-        });
+          this.logInfo(
+            `⚡ Starting Claude Code execution (iteration ${iterationCount})...`
+          );
+
+          // Execute with JSON output to capture session ID
+          result = await this.executeClaudeCodeWithSession(prompt, {
+            timeout: iterationTimeoutMs,
+            workingDir: this.options.workingDir,
+            outputFormat: 'json'
+          });
+
+          // Extract session ID for continuity
+          if (result.sessionId) {
+            claudeSessionId = result.sessionId;
+            this.logInfo(`🔗 Claude Code session established: ${claudeSessionId.slice(0, 8)}...`);
+          }
+        } else {
+          // Subsequent iterations: Use continuation with enhanced prompts
+          if (claudeSessionId) {
+            prompt = this.generateContinuationPrompt(
+              task,
+              iterationCount,
+              elapsedMs,
+              remainingMs,
+              totalFilesChanged
+            );
+
+            this.logInfo(
+              `⚡ Continuing Claude Code session (iteration ${iterationCount})...`
+            );
+
+            // Continue existing session with -c flag
+            result = await this.executeClaudeCodeContinuation(prompt, {
+              timeout: iterationTimeoutMs,
+              workingDir: this.options.workingDir,
+              sessionId: claudeSessionId
+            });
+          } else {
+            // Fallback to regular execution if no session available
+            this.logWarn('⚠️  No session available, falling back to regular execution');
+            prompt = await this.generateIterativeTaskPrompt(
+              task,
+              iterationCount,
+              totalOutput,
+              totalFilesChanged
+            );
+
+            result = await this.executeClaudeCode(prompt, {
+              timeout: iterationTimeoutMs,
+              workingDir: this.options.workingDir
+            });
+          }
+        }
 
         const iterationDuration = Date.now() - totalStartTime;
         const iterationDurationSeconds = Math.round(
@@ -1218,9 +1269,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         const iterationFilesChanged = await this.gitManager.getChangedFiles();
 
         // Accumulate results
+        const iterationOutput = result.output || result.stdout || '';
         totalOutput +=
           (totalOutput ? `\n\n--- Iteration ${iterationCount} ---\n` : '') +
-          result.stdout;
+          iterationOutput;
 
         // Check for output size limit to prevent memory issues
         if (totalOutput.length > STORAGE.MAX_OUTPUT_SIZE) {
@@ -1247,18 +1299,20 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         // Check if we should continue iterating
         const currentElapsedMs = Date.now() - totalStartTime;
         const shouldContinue =
-          hasMinimumDuration && currentElapsedMs < minimumDurationMs;
+          hasMinimumDuration &&
+          currentElapsedMs < minimumDurationMs &&
+          iterationCount < MAX_ITERATIONS;
 
         if (shouldContinue) {
           const remainingMinutes = Math.round(
             (minimumDurationMs - currentElapsedMs) / TIME.MS.ONE_MINUTE
           );
           this.logInfo(
-            `🔄 Continuing iterations - ${remainingMinutes} minutes remaining to meet minimum duration`
+            `🔄 Continuing session - ${remainingMinutes} minutes remaining to meet minimum duration`
           );
 
-          // Add a small delay between iterations to allow file system to settle
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          // Shorter delay for session continuation
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         } else {
           taskCompleted = true;
         }
@@ -1285,7 +1339,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         error: '',
         filesChanged: totalFilesChanged,
         duration: totalDuration,
-        iterations: iterationCount
+        iterations: iterationCount,
+        sessionId: claudeSessionId
       };
     } catch (error) {
       this.logError(`💥 Claude Code execution failed: ${error.message}`);
@@ -1294,7 +1349,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         error: error.message,
         filesChanged: totalFilesChanged,
         duration: Date.now() - totalStartTime,
-        iterations: iterationCount
+        iterations: iterationCount,
+        sessionId: claudeSessionId
       };
     }
   }
@@ -1485,6 +1541,214 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
       // Log the final prompt being sent
       this.logPrompt(prompt, 'Final');
+    });
+  }
+
+  /**
+   * Execute Claude Code with session management and JSON output
+   * Used for the first iteration to establish a session
+   *
+   * @async
+   * @param {string} prompt - The prompt to send to Claude Code
+   * @param {Object} options - Execution options
+   * @returns {Promise<Object>} Execution result with session metadata
+   */
+  async executeClaudeCodeWithSession (prompt, options = {}) {
+    return new Promise((resolve, reject) => {
+      this.logInfo('⚙️  Executing Claude Code with session management...');
+
+      // Use JSON output format to capture session metadata
+      const args = [
+        prompt,
+        '-p',
+        '--dangerously-skip-permissions',
+        '--output-format',
+        'json'
+      ];
+
+      const child = spawn('claude', args, {
+        cwd: options.workingDir || this.options.workingDir,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      this.state.claudeProcess = child;
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        const output = data.toString();
+        stdout += output;
+      });
+
+      child.stderr.on('data', (data) => {
+        const output = data.toString();
+        stderr += output;
+      });
+
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(
+          new Error(
+            `Claude Code execution timed out after ${options.timeout}ms`
+          )
+        );
+      }, options.timeout || TIME.MS.FIVE_MINUTES);
+
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        this.state.claudeProcess = null;
+
+        if (code === 0) {
+          try {
+            // Parse JSON response to extract session metadata
+            const response = JSON.parse(stdout.trim());
+            // Display the actual output (not the JSON metadata)
+            if (response.result) {
+              response.result.split('\n').forEach((line) => {
+                if (line.trim()) {
+                  this.logClaudeOutput(line);
+                }
+              });
+            }
+
+            resolve({
+              output: response.result || '',
+              sessionId: response.session_id,
+              duration: response.duration_ms,
+              turns: response.num_turns,
+              cost: response.total_cost_usd,
+              success: !response.is_error
+            });
+          } catch (parseError) {
+            // Fallback to text output if JSON parsing fails
+            this.logWarn('⚠️  Failed to parse JSON response, using text output');
+            if (stdout.trim()) {
+              stdout.split('\n').forEach((line) => {
+                if (line.trim()) {
+                  this.logClaudeOutput(line);
+                }
+              });
+            }
+            resolve({ output: stdout, sessionId: null, success: true });
+          }
+        } else {
+          if (stderr.trim()) {
+            stderr.split('\n').forEach((line) => {
+              if (line.trim()) {
+                this.logClaudeError(line);
+              }
+            });
+          }
+
+          const errorOutput =
+            stderr.trim() || stdout.trim() || 'No output captured';
+          reject(
+            new Error(`Claude Code exited with code ${code}: ${errorOutput}`)
+          );
+        }
+      });
+
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        this.state.claudeProcess = null;
+        reject(error);
+      });
+    });
+  }
+
+  /**
+   * Continue an existing Claude Code session using the -c flag
+   * Used for subsequent iterations to maintain conversation context
+   *
+   * @async
+   * @param {string} prompt - The continuation prompt
+   * @param {Object} options - Execution options including sessionId
+   * @returns {Promise<Object>} Execution result
+   */
+  async executeClaudeCodeContinuation (prompt, options = {}) {
+    return new Promise((resolve, reject) => {
+      this.logInfo('⚙️  Continuing Claude Code session...');
+
+      // Use -c flag to continue the most recent session
+      const args = [
+        '-c',
+        prompt,
+        '-p',
+        '--dangerously-skip-permissions'
+      ];
+
+      const child = spawn('claude', args, {
+        cwd: options.workingDir || this.options.workingDir,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      this.state.claudeProcess = child;
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        const output = data.toString();
+        stdout += output;
+      });
+
+      child.stderr.on('data', (data) => {
+        const output = data.toString();
+        stderr += output;
+      });
+
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(
+          new Error(
+            `Claude Code continuation timed out after ${options.timeout}ms`
+          )
+        );
+      }, options.timeout || TIME.MS.FIVE_MINUTES);
+
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        this.state.claudeProcess = null;
+
+        if (code === 0) {
+          // Display Claude Code output after completion
+          if (stdout.trim()) {
+            stdout.split('\n').forEach((line) => {
+              if (line.trim()) {
+                this.logClaudeOutput(line);
+              }
+            });
+          }
+
+          resolve({
+            output: stdout,
+            success: true,
+            sessionId: options.sessionId // Preserve session ID
+          });
+        } else {
+          // Display Claude Code errors
+          if (stderr.trim()) {
+            stderr.split('\n').forEach((line) => {
+              if (line.trim()) {
+                this.logClaudeError(line);
+              }
+            });
+          }
+
+          const errorOutput =
+            stderr.trim() || stdout.trim() || 'No output captured';
+          reject(
+            new Error(`Claude Code continuation failed with code ${code}: ${errorOutput}`)
+          );
+        }
+      });
+
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        this.state.claudeProcess = null;
+        reject(error);
+      });
     });
   }
 
@@ -1796,6 +2060,46 @@ Please continue implementing and improving this task, focusing on areas that wil
 
     // For first iteration, use the standard prompt
     return this.generateTaskPrompt(task);
+  }
+
+  /**
+   * Generate a continuation prompt for subsequent iterations
+   * This is much more concise than full task prompts since context is preserved
+   *
+   * @param {Object} task - The task being executed
+   * @param {number} iterationCount - Current iteration number
+   * @param {number} elapsedMs - Time elapsed so far
+   * @param {number} remainingMs - Time remaining to meet minimum duration
+   * @param {Array} filesChanged - Files modified in previous iterations
+   * @returns {string} Continuation prompt
+   */
+  generateContinuationPrompt (
+    task,
+    iterationCount,
+    elapsedMs,
+    remainingMs,
+    filesChanged
+  ) {
+    const elapsedMinutes = Math.round(elapsedMs / TIME.MS.ONE_MINUTE);
+    const remainingMinutes = Math.round(remainingMs / TIME.MS.ONE_MINUTE);
+
+    return `Continue working on the task "${task.title}" (iteration ${iterationCount}).
+
+⏱️  Time Status:
+- Elapsed: ${elapsedMinutes} minutes
+- Remaining: ${remainingMinutes} minutes to meet minimum duration
+- Files modified: ${filesChanged.length > 0 ? filesChanged.join(', ') : 'none yet'}
+
+🎯 Focus Areas for This Iteration:
+- Build upon the previous work in our conversation
+- Improve implementation quality and completeness
+- Add comprehensive testing and error handling
+- Enhance documentation and code comments
+- Consider performance optimizations
+- Ensure all acceptance criteria are thoroughly met
+
+💡 Remember: You have full context from our previous conversation, so continue naturally
+from where we left off. Focus on adding meaningful value in the remaining ${remainingMinutes} minutes.`;
   }
 
   async generateTaskPrompt (task) {
