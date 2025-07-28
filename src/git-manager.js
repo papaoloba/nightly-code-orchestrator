@@ -382,6 +382,17 @@ node_modules/
           this.options.logger.info('📝 Staging all changes...');
           await this.git.add('.');
         }
+        
+        // Double-check: ensure ALL modified files are staged before commit
+        // This catches any files that might have been missed or created after initial detection
+        const status = await this.git.status();
+        const unstaged = [...status.modified, ...status.created, ...status.deleted, ...status.renamed.map(r => r.to)];
+        
+        if (unstaged.length > 0) {
+          this.options.logger.warn(`⚠️  Found ${unstaged.length} unstaged files, adding them now...`);
+          this.options.logger.info(`📝 Unstaged files: ${unstaged.join(', ')}`);
+          await this.git.add('.');
+        }
 
         // Create commit
         this.options.logger.info(`✨ Creating commit: ${commitMessage.split('\n')[0]}`);
@@ -583,6 +594,22 @@ node_modules/
         return;
       }
 
+      // Check for any uncommitted changes before creating PR
+      const preStatus = await this.git.status();
+      if (preStatus.files.length > 0) {
+        this.options.logger.warn(`⚠️  Found ${preStatus.files.length} uncommitted changes before PR creation`);
+        this.options.logger.info('📝 Adding and committing remaining changes...');
+        
+        // Stage all remaining changes
+        await this.git.add('.');
+        
+        // Create an additional commit for these changes
+        const additionalCommitMessage = `chore: Add remaining changes for task ${task.id}\n\nThese files were modified but not included in the initial commit.`;
+        await this.git.commit(additionalCommitMessage);
+        
+        this.options.logger.info('✅ Additional changes committed');
+      }
+
       // Ensure branch is pushed before creating PR
       if (this.options.autoPush) {
         await this.pushTaskBranch(task);
@@ -711,6 +738,22 @@ node_modules/
       if (!this.sessionBranch) {
         this.options.logger.warn('⚠️  No session branch to create PR from');
         return;
+      }
+
+      // Check for any uncommitted changes before creating PR
+      const preStatus = await this.git.status();
+      if (preStatus.files.length > 0) {
+        this.options.logger.warn(`⚠️  Found ${preStatus.files.length} uncommitted changes before session PR creation`);
+        this.options.logger.info('📝 Adding and committing remaining session changes...');
+        
+        // Stage all remaining changes
+        await this.git.add('.');
+        
+        // Create an additional commit for these changes
+        const additionalCommitMessage = `chore: Add remaining changes for session ${this.sessionBranch.sessionId}\n\nThese files were modified but not included in task commits.`;
+        await this.git.commit(additionalCommitMessage);
+        
+        this.options.logger.info('✅ Additional session changes committed');
       }
 
       const prTitle = `Coding Session: ${sessionResults.completedTasks} tasks completed`;
@@ -1024,7 +1067,7 @@ All successful tasks merged to main
         if (this.taskBranches.size > 0) {
           this.options.logger.info(`🧹 Cleaning up ${this.taskBranches.size} task branches...`);
 
-          for (const [taskId, branchInfo] of this.taskBranches) {
+          for (const [, branchInfo] of this.taskBranches) {
             try {
               if (branches.all.includes(branchInfo.branchName)) {
                 this.options.logger.info(`🗑️  Deleting task branch: ${branchInfo.branchName}`);
