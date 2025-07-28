@@ -191,12 +191,12 @@ describe('Dependency-Aware Branching', () => {
       const completedTasksMap = new Map();
       completedTasksMap.set('setup-db', {
         taskId: 'setup-db',
-        branchName: 'nightly-feature-setup-db-setup-database',
+        branchName: 'nightly/feature-setup-db-setup-database',
         completedAt: Date.now()
       });
 
       // Create the branch that's referenced in the map
-      await git.checkoutLocalBranch('nightly-feature-setup-db-setup-database');
+      await git.checkoutLocalBranch('nightly/feature-setup-db-setup-database');
       const file1 = path.join(testDir, 'db-setup.txt');
       await fs.writeFile(file1, 'database setup from completed task');
       await git.add('.');

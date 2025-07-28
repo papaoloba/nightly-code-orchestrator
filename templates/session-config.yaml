@@ -43,7 +43,7 @@ project:
 
 git:
   # Prefix for automatically created branches
-  branch_prefix: "nightly-"
+  branch_prefix: "nightly/"
   
   # Automatically push branches to remote repository
   auto_push: true

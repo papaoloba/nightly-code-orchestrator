@@ -227,7 +227,7 @@ describe('Orchestrator', () => {
   describe('Git Integration', () => {
     it('should create task branch successfully', async () => {
       const mockTask = { id: 'test-task', title: 'Test Task' };
-      const expectedBranchName = 'nightly-2023-01-01-test-task-test-task';
+      const expectedBranchName = 'nightly/2023-01-01-test-task-test-task';
 
       mockGitManager.createTaskBranch.mockResolvedValue(expectedBranchName);
 
@@ -522,7 +522,7 @@ describe('Orchestrator', () => {
       // Mock task execution
       orchestrator.executeTask = jest.fn().mockResolvedValue(mockResult);
       orchestrator.validateTaskCompletion = jest.fn().mockResolvedValue({ passed: true });
-      mockGitManager.createTaskBranch.mockResolvedValue('nightly-feature-task-001');
+      mockGitManager.createTaskBranch.mockResolvedValue('nightly/feature-task-001');
 
       const tasks = [mockTask];
       await orchestrator.executeTasks(tasks);

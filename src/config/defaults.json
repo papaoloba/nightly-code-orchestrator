@@ -16,7 +16,7 @@
   },
   
   "git": {
-    "branch_prefix": "nightly-",
+    "branch_prefix": "nightly/",
     "auto_push": true,
     "create_pr": true,
     "pr_template": "",
