@@ -612,10 +612,8 @@ node_modules/
           await this.git.add('.');
         }
 
-        // Create commit
-        this.options.logger.info(
-          `✨ Creating commit: ${commitMessage.split('\n')[0]}`
-        );
+        // Create commit with enhanced logging
+        this.logCommitCreation(task, result, commitMessage);
         const commitResult = await this.git.commit(commitMessage);
         commits.push(commitResult.commit);
       }
@@ -727,6 +725,41 @@ node_modules/
     message += `\\n\\n${footer.join('\\n')}`;
 
     return message;
+  }
+
+  /**
+   * Log commit creation with enhanced formatting for better readability
+   */
+  logCommitCreation (task, result, commitMessage) {
+    const lines = commitMessage.split('\\n');
+    const subject = lines[0];
+    
+    // Clip long commit messages for readability
+    const maxLength = 80;
+    const clippedSubject = subject.length > maxLength 
+      ? subject.substring(0, maxLength - 3) + '...'
+      : subject;
+
+    // Log the clipped commit subject line
+    this.options.logger.info(`✨ Creating commit: ${clippedSubject}`);
+  }
+
+  /**
+   * Format duration in a human-readable way
+   */
+  formatDuration (durationMs) {
+    const seconds = Math.round(durationMs / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    if (minutes < 60) {
+      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    }
+    
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   }
 
   getCommitType (taskType) {
