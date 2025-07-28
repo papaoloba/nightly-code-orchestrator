@@ -1047,7 +1047,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       prompt = await this.generateTaskPrompt(task);
     }
 
-    const timeoutMs = (task.minimum_duration || 60) * 60 * TIME.MS.ONE_SECOND;
+    // Always use standard 60-minute timeout for safety
+    const timeoutMs = TIME.SECONDS.DEFAULT_TASK_DURATION_MINUTES * 60 * TIME.MS.ONE_SECOND;
 
     try {
       const startTime = Date.now();
@@ -1115,6 +1116,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
   async executeTask (task) {
     // For tasks with minimum_duration, we'll iteratively prompt Claude until minimum time is reached
+    // IMPORTANT: Each iteration gets the full 60-minute timeout to allow natural task completion
+    // The minimum_duration controls iteration count, NOT the timeout per iteration
     const hasMinimumDuration =
       task.minimum_duration && task.minimum_duration > 0;
     const minimumDurationMs = task.minimum_duration
@@ -1156,11 +1159,15 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         const elapsedMs = Date.now() - totalStartTime;
         const remainingMs = minimumDurationMs - elapsedMs;
 
-        // Calculate timeout for this iteration
-        const iterationTimeoutMs =
-          hasMinimumDuration && remainingMs > 0
-            ? Math.min(baseTimeoutMs, remainingMs)
-            : baseTimeoutMs;
+        // Check if we should skip this iteration due to time constraints
+        if (hasMinimumDuration && remainingMs <= 0) {
+          this.logInfo('⏰ Minimum duration reached, skipping further iterations');
+          taskCompleted = true;
+          break;
+        }
+
+        // Always use standard timeout for each iteration
+        const iterationTimeoutMs = baseTimeoutMs;
 
         const iterationTimeoutMinutes = Math.round(
           iterationTimeoutMs / TIME.MS.ONE_MINUTE
@@ -1302,7 +1309,8 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         const shouldContinue =
           hasMinimumDuration &&
           currentElapsedMs < minimumDurationMs &&
-          iterationCount < MAX_ITERATIONS;
+          iterationCount < MAX_ITERATIONS &&
+          !taskCompleted;
 
         if (shouldContinue) {
           const remainingMinutes = Math.round(
