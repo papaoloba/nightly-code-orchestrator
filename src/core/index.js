@@ -1,8 +1,8 @@
 const { Orchestrator } = require('./orchestrator');
 const { TaskManager } = require('./task-manager');
-const { GitManager } = require('./git-manager');
-const { Validator } = require('./validator');
-const { Reporter } = require('./reporter');
+const { GitManager } = require('../integrations/git-manager');
+const { Validator } = require('../utils/validator');
+const { Reporter } = require('../utils/reporter');
 
 // Export all main classes for programmatic use
 module.exports = {

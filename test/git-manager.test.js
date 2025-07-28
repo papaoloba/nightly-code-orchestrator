@@ -3,7 +3,7 @@ jest.mock('simple-git');
 jest.mock('fs-extra');
 jest.mock('cross-spawn');
 
-const { GitManager } = require('../src/git-manager');
+const { GitManager } = require('../src/integrations/git-manager');
 const simpleGit = require('simple-git');
 const fs = require('fs-extra');
 const path = require('path');

@@ -428,14 +428,16 @@ class Validator {
           });
         }
 
-        // Validate estimated duration
-        const duration = task.estimated_duration || 60;
-        if (duration > 480) { // More than 8 hours
-          result.warnings.push({
-            type: 'long_task_duration',
-            message: `Task ${task.id || index} has very long estimated duration: ${duration} minutes`,
-            path: `tasks[${index}].estimated_duration`
-          });
+        // Validate minimum duration
+        if (task.minimum_duration) {
+          const duration = task.minimum_duration;
+          if (duration > 480) { // More than 8 hours
+            result.warnings.push({
+              type: 'long_task_duration',
+              message: `Task ${task.id || index} has very long minimum duration: ${duration} minutes`,
+              path: `tasks[${index}].minimum_duration`
+            });
+          }
         }
 
         // Validate dependencies
@@ -499,7 +501,7 @@ class Validator {
           });
         }
 
-        totalEstimatedTime += duration;
+        totalEstimatedTime += task.minimum_duration || 0;
       }
 
       // Check total estimated time

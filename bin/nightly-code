@@ -5,11 +5,30 @@ const chalk = require('chalk');
 const path = require('path');
 const fs = require('fs-extra');
 
-const { Orchestrator } = require('../src/orchestrator');
-const { Reporter } = require('../src/reporter');
-const { Validator } = require('../src/validator');
-const { TaskDescriptor } = require('../src/task-descriptor');
+const { Orchestrator } = require('../src/core/orchestrator');
+const { Reporter } = require('../src/utils/reporter');
+const { Validator } = require('../src/utils/validator');
+const { TaskDescriptor } = require('../src/core/task-descriptor');
 const packageJson = require('../package.json');
+
+// File-scoped logging methods
+const log = {
+  info: (message) => console.log(chalk.blue(message)),
+  success: (message) => console.log(chalk.green(message)),
+  error: (message) => console.error(chalk.red(message)),
+  warn: (message) => console.log(chalk.yellow(message)),
+  detail: (message) => console.log(chalk.cyan(message)),
+  plain: (message) => console.log(message),
+  json: (data) => console.log(JSON.stringify(data, null, 2)),
+  divider: (length = 50) => console.log(chalk.gray('─'.repeat(length))),
+  errorWithDetail: (prefix, error) => console.error(chalk.red(prefix), error.message),
+  statusMessage: (label, value) => console.log(`${label}: ${value}`),
+  listItem: (index, message) => console.log(`  ${index}. ${message}`),
+  heading: (title) => {
+    console.log(chalk.blue(title));
+    console.log(chalk.gray('─'.repeat(50)));
+  }
+};
 
 program
   .name('nightly-code')
@@ -24,13 +43,13 @@ program
   .option('--superclaude', 'Enable SuperClaude Framework integration')
   .action(async (options) => {
     try {
-      console.log(chalk.blue('🚀 Initializing Nightly Code configuration...'));
+      log.info('🚀 Initializing Nightly Code configuration...');
 
       const configPath = path.join(process.cwd(), 'nightly-code.yaml');
       const tasksPath = path.join(process.cwd(), 'nightly-tasks.yaml');
 
       if (!options.force && (await fs.pathExists(configPath) || await fs.pathExists(tasksPath))) {
-        console.error(chalk.red('Configuration already exists. Use --force to overwrite.'));
+        log.error('Configuration already exists. Use --force to overwrite.');
         process.exit(1);
       }
 
@@ -56,21 +75,21 @@ program
         };
 
         await fs.writeFile(configPath, YAML.stringify(config));
-        console.log(chalk.green('✅ SuperClaude Framework integration enabled!'));
+        log.success('✅ SuperClaude Framework integration enabled!');
       }
 
-      console.log(chalk.green('✅ Configuration initialized successfully!'));
-      console.log(chalk.yellow(`📝 Edit ${configPath} and ${tasksPath} to customize your setup`));
+      log.success('✅ Configuration initialized successfully!');
+      log.warn(`📝 Edit ${configPath} and ${tasksPath} to customize your setup`);
 
       if (options.superclaude) {
-        console.log(chalk.cyan('🧠 SuperClaude Framework features:'));
-        console.log(chalk.cyan('   - Intelligent task planning with slash commands'));
-        console.log(chalk.cyan('   - Advanced orchestration and execution strategies'));
-        console.log(chalk.cyan('   - Deep integration with nightly workflow'));
-        console.log(chalk.cyan('   - Uses global SuperClaude commands (no local commands_path required)'));
+        log.detail('🧠 SuperClaude Framework features:');
+        log.detail('   - Intelligent task planning with slash commands');
+        log.detail('   - Advanced orchestration and execution strategies');
+        log.detail('   - Deep integration with nightly workflow');
+        log.detail('   - Uses global SuperClaude commands (no local commands_path required)');
       }
     } catch (error) {
-      console.error(chalk.red('❌ Initialization failed:'), error.message);
+      log.errorWithDetail('❌ Initialization failed:', error);
       process.exit(1);
     }
   });
@@ -83,7 +102,7 @@ program
   .option('--dry-run', 'Show what would be scheduled without creating it')
   .action(async (options) => {
     try {
-      console.log(chalk.blue('⏰ Setting up automated scheduling...'));
+      log.info('⏰ Setting up automated scheduling...');
 
       const setupScript = require('../scripts/setup-cron');
       await setupScript.configure({
@@ -93,11 +112,11 @@ program
       });
 
       if (!options.dryRun) {
-        console.log(chalk.green('✅ Scheduling configured successfully!'));
-        console.log(chalk.yellow(`Next run: ${options.cron} (${options.timezone})`));
+        log.success('✅ Scheduling configured successfully!');
+        log.warn(`Next run: ${options.cron} (${options.timezone})`);
       }
     } catch (error) {
-      console.error(chalk.red('❌ Scheduling setup failed:'), error.message);
+      log.errorWithDetail('❌ Scheduling setup failed:', error);
       process.exit(1);
     }
   });
@@ -115,7 +134,7 @@ program
   .option('--task-pr', 'Use task-based PR strategy (one PR per task) - default')
   .action(async (options) => {
     try {
-      console.log(chalk.blue('🎯 Starting coding session...'));
+      log.info('🎯 Starting coding session...');
 
       // Determine PR strategy from CLI flags
       let prStrategy;
@@ -139,15 +158,15 @@ program
       const result = await orchestrator.run();
 
       if (result.success) {
-        console.log(chalk.green('✅ Session completed successfully!'));
-        console.log(chalk.blue(`📊 Completed ${result.completedTasks}/${result.totalTasks} tasks`));
-        console.log(chalk.blue(`⏱️  Duration: ${Math.round(result.duration / 60000)} minutes`));
+        log.success('✅ Session completed successfully!');
+        log.info(`📊 Completed ${result.completedTasks}/${result.totalTasks} tasks`);
+        log.info(`⏱️  Duration: ${Math.round(result.duration / 60000)} minutes`);
       } else {
-        console.log(chalk.yellow('⚠️  Session completed with issues'));
-        console.log(chalk.red(`❌ Errors: ${result.errors.length}`));
+        log.warn('⚠️  Session completed with issues');
+        log.error(`❌ Errors: ${result.errors.length}`);
       }
     } catch (error) {
-      console.error(chalk.red('❌ Session failed:'), error.message);
+      log.errorWithDetail('❌ Session failed:', error);
       process.exit(1);
     }
   });
@@ -163,31 +182,30 @@ program
       const status = await reporter.getLastSessionStatus();
 
       if (options.json) {
-        console.log(JSON.stringify(status, null, 2));
+        log.json(status);
         return;
       }
 
-      console.log(chalk.blue('📊 Last Session Status'));
-      console.log('─'.repeat(50));
+      log.heading('📊 Last Session Status');
 
       if (!status) {
-        console.log(chalk.yellow('No previous sessions found'));
+        log.warn('No previous sessions found');
         return;
       }
 
-      console.log(`Status: ${status.success ? chalk.green('✅ Success') : chalk.red('❌ Failed')}`);
-      console.log(`Date: ${chalk.cyan(new Date(status.timestamp).toLocaleString())}`);
-      console.log(`Duration: ${chalk.cyan(Math.round(status.duration / 60))} minutes`);
-      console.log(`Tasks: ${chalk.cyan(status.completedTasks)}/${chalk.cyan(status.totalTasks)} completed`);
+      log.statusMessage('Status', status.success ? chalk.green('✅ Success') : chalk.red('❌ Failed'));
+      log.statusMessage('Date', chalk.cyan(new Date(status.timestamp).toLocaleString()));
+      log.statusMessage('Duration', `${chalk.cyan(Math.round(status.duration / 60))} minutes`);
+      log.statusMessage('Tasks', `${chalk.cyan(status.completedTasks)}/${chalk.cyan(status.totalTasks)} completed`);
 
       if (options.verbose && status.errors?.length > 0) {
-        console.log(`\n${chalk.red('Errors:')}`);
+        log.plain(`\n${chalk.red('Errors:')}`);
         status.errors.forEach((error, i) => {
-          console.log(`  ${i + 1}. ${error}`);
+          log.listItem(i + 1, error);
         });
       }
     } catch (error) {
-      console.error(chalk.red('❌ Failed to get status:'), error.message);
+      log.errorWithDetail('❌ Failed to get status:', error);
       process.exit(1);
     }
   });
@@ -204,35 +222,34 @@ program
 
       if (options.list) {
         const config = await validator.loadConfig();
-        console.log(chalk.blue('Current Configuration:'));
-        console.log('─'.repeat(50));
-        console.log(JSON.stringify(config, null, 2));
+        log.heading('Current Configuration:');
+        log.json(config);
         return;
       }
 
       if (options.validate) {
         const validation = await validator.validateAll();
         if (validation.valid) {
-          console.log(chalk.green('✅ Configuration is valid'));
+          log.success('✅ Configuration is valid');
         } else {
-          console.log(chalk.red('❌ Configuration has errors:'));
-          validation.errors.forEach(error => console.log(`  - ${error}`));
+          log.error('❌ Configuration has errors:');
+          validation.errors.forEach(error => log.plain(`  - ${error}`));
           process.exit(1);
         }
         return;
       }
 
       if (options.edit) {
-        console.log(chalk.blue('🔧 Interactive Configuration Editor'));
+        log.info('🔧 Interactive Configuration Editor');
         // Interactive configuration editing would go here
-        console.log(chalk.yellow('Interactive editing not yet implemented'));
+        log.warn('Interactive editing not yet implemented');
         return;
       }
 
       // Default action - show help
       program.commands.find(cmd => cmd.name() === 'config').help();
     } catch (error) {
-      console.error(chalk.red('❌ Configuration management failed:'), error.message);
+      log.errorWithDetail('❌ Configuration management failed:', error);
       process.exit(1);
     }
   });
@@ -245,7 +262,7 @@ program
   .option('--fix', 'Attempt to fix common issues')
   .action(async (options) => {
     try {
-      console.log(chalk.blue('🔍 Validating configuration...'));
+      log.info('🔍 Validating configuration...');
 
       const validator = new Validator({
         configPath: options.config,
@@ -255,28 +272,28 @@ program
       const result = await validator.validateAll();
 
       if (result.valid) {
-        console.log(chalk.green('✅ All validations passed!'));
+        log.success('✅ All validations passed!');
       } else {
-        console.log(chalk.red('❌ Validation failed:'));
+        log.error('❌ Validation failed:');
         result.errors.forEach(error => {
-          console.log(`  - ${error.message} (${error.path})`);
+          log.plain(`  - ${error.message} (${error.path})`);
         });
 
         if (options.fix) {
-          console.log(chalk.yellow('🔧 Attempting to fix issues...'));
+          log.warn('🔧 Attempting to fix issues...');
           const fixResult = await validator.attemptFix(result.errors);
           if (fixResult.fixed > 0) {
-            console.log(chalk.green(`✅ Fixed ${fixResult.fixed} issues`));
+            log.success(`✅ Fixed ${fixResult.fixed} issues`);
           }
           if (fixResult.remaining > 0) {
-            console.log(chalk.yellow(`⚠️  ${fixResult.remaining} issues require manual intervention`));
+            log.warn(`⚠️  ${fixResult.remaining} issues require manual intervention`);
           }
         }
 
         process.exit(result.errors.length);
       }
     } catch (error) {
-      console.error(chalk.red('❌ Validation failed:'), error.message);
+      log.errorWithDetail('❌ Validation failed:', error);
       process.exit(1);
     }
   });
@@ -290,7 +307,7 @@ program
   .option('--last <count>', 'Show last N sessions', '10')
   .action(async (date, options) => {
     try {
-      console.log(chalk.blue(`📈 Generating report for ${date}...`));
+      log.info(`📈 Generating report for ${date}...`);
 
       const reporter = new Reporter();
       const report = await reporter.generateReport({
@@ -301,12 +318,12 @@ program
 
       if (options.output) {
         await fs.writeFile(options.output, report);
-        console.log(chalk.green(`✅ Report saved to ${options.output}`));
+        log.success(`✅ Report saved to ${options.output}`);
       } else {
-        console.log(report);
+        log.plain(report);
       }
     } catch (error) {
-      console.error(chalk.red('❌ Report generation failed:'), error.message);
+      log.errorWithDetail('❌ Report generation failed:', error);
       process.exit(1);
     }
   });
@@ -320,8 +337,8 @@ program
   .option('--append', 'Append to existing tasks file instead of overwriting')
   .action(async (options) => {
     try {
-      console.log(chalk.blue('📝 Task Description Mode'));
-      console.log(chalk.gray(
+      log.info('📝 Task Description Mode');
+      log.plain(chalk.gray(
         'Describe the work to be done in natural language. Claude will convert it into optimized tasks.\n'
       ));
 
@@ -333,10 +350,10 @@ program
         // Read descriptions from file
         const content = await fs.readFile(options.file, 'utf8');
         descriptions = content.split('\n\n').filter(desc => desc.trim());
-        console.log(chalk.green(`✅ Loaded ${descriptions.length} task descriptions from file`));
+        log.success(`✅ Loaded ${descriptions.length} task descriptions from file`);
       } else if (options.interactive) {
         // Interactive mode
-        console.log(chalk.yellow('Enter task descriptions. Type "done" to finish.\n'));
+        log.warn('Enter task descriptions. Type "done" to finish.\n');
 
         let done = false;
         while (!done) {
@@ -354,7 +371,7 @@ program
             });
           } catch (error) {
             // Fallback to simple input if editor fails
-            console.log(chalk.yellow('Editor not available, using simple input mode'));
+            log.warn('Editor not available, using simple input mode');
             description = await input({
               message: 'Describe the task:',
               validate: (input) => {
@@ -370,7 +387,7 @@ program
             done = true;
           } else {
             descriptions.push(description);
-            console.log(chalk.green(`✅ Task ${descriptions.length} added`));
+            log.success(`✅ Task ${descriptions.length} added`);
 
             const shouldContinue = await confirm({
               message: 'Add another task?',
@@ -384,23 +401,23 @@ program
         // Single task mode from command line arguments
         const args = program.args.slice(1); // Skip 'describe' command
         if (args.length === 0) {
-          console.log(chalk.yellow('Please provide a task description or use --interactive mode'));
-          console.log(chalk.gray('\nExamples:'));
-          console.log(chalk.gray('  nightly-code describe "Implement user authentication with email verification"'));
-          console.log(chalk.gray('  nightly-code describe --interactive'));
-          console.log(chalk.gray('  nightly-code describe --file tasks.txt'));
+          log.warn('Please provide a task description or use --interactive mode');
+          log.plain(chalk.gray('\nExamples:'));
+          log.plain(chalk.gray('  nightly-code describe "Implement user authentication with email verification"'));
+          log.plain(chalk.gray('  nightly-code describe --interactive'));
+          log.plain(chalk.gray('  nightly-code describe --file tasks.txt'));
           process.exit(1);
         }
         descriptions = [args.join(' ')];
       }
 
       if (descriptions.length === 0) {
-        console.log(chalk.yellow('No task descriptions provided'));
+        log.warn('No task descriptions provided');
         process.exit(1);
       }
 
       // Process descriptions with automatic splitting
-      console.log(chalk.blue(`\n🤖 Processing ${descriptions.length} task description(s) with auto-splitting...`));
+      log.info(`\n🤖 Processing ${descriptions.length} task description(s) with auto-splitting...`);
 
       // Track splitting results
       let totalTasks = 0;
@@ -449,20 +466,19 @@ program
 
       // Write output
       await fs.writeFile(options.output, yamlContent);
-      console.log(chalk.green(`\n✅ Tasks written to ${options.output}`));
+      log.success(`\n✅ Tasks written to ${options.output}`);
 
       // Show splitting summary
       if (splitCount > 0) {
-        console.log(chalk.cyan(
+        log.detail(
           `🔄 Auto-split applied: ${splitCount} complex descriptions split into ${totalTasks} tasks`
-        ));
+        );
       }
 
       // Show summary
       const YAML = require('yaml');
       const tasks = YAML.parse(yamlContent).tasks;
-      console.log(chalk.blue('\n📊 Task Summary:'));
-      console.log(chalk.gray('─'.repeat(50)));
+      log.heading('\n📊 Task Summary:');
 
       tasks.forEach((task, index) => {
         const priority = task.priority >= 8
@@ -470,48 +486,48 @@ program
           : task.priority >= 6
             ? chalk.yellow(`[P${task.priority}]`)
             : chalk.green(`[P${task.priority}]`);
-        console.log(`${index + 1}. ${priority} ${task.title}`);
-        console.log(
-          `   Type: ${chalk.cyan(task.type)}, Duration: ${chalk.cyan(`${task.estimated_duration} min`)}, ` +
+        log.plain(`${index + 1}. ${priority} ${task.title}`);
+        log.plain(
+          `   Type: ${chalk.cyan(task.type)}, Min Duration: ${chalk.cyan(task.minimum_duration ? `${task.minimum_duration} min` : 'none')}, ` +
           `Tags: ${chalk.gray(task.tags.join(', '))}`
         );
       });
 
-      const totalDuration = tasks.reduce((sum, task) => sum + task.estimated_duration, 0);
-      console.log(chalk.gray('─'.repeat(50)));
-      console.log(chalk.blue(
+      const totalDuration = tasks.reduce((sum, task) => sum + (task.minimum_duration || 0), 0);
+      log.divider();
+      log.info(
         `Total estimated duration: ${Math.round(totalDuration / 60)} hours ${totalDuration % 60} minutes`
-      ));
+      );
 
       // Show task IDs for reference
-      console.log(chalk.gray('\nTask IDs for reference:'));
+      log.plain(chalk.gray('\nTask IDs for reference:'));
       tasks.slice(0, 5).forEach(task => {
-        console.log(chalk.gray(`  ${task.id}`));
+        log.plain(chalk.gray(`  ${task.id}`));
       });
       if (tasks.length > 5) {
-        console.log(chalk.gray(`  ... and ${tasks.length - 5} more`));
+        log.plain(chalk.gray(`  ... and ${tasks.length - 5} more`));
       }
     } catch (error) {
-      console.error(chalk.red('❌ Task description failed:'), error.message);
+      log.errorWithDetail('❌ Task description failed:', error);
       process.exit(1);
     }
   });
 
 // Error handling
 program.on('command:*', () => {
-  console.error(chalk.red(`Invalid command: ${program.args.join(' ')}`));
-  console.log(chalk.yellow('See --help for available commands'));
+  log.error(`Invalid command: ${program.args.join(' ')}`);
+  log.warn('See --help for available commands');
   process.exit(1);
 });
 
 // Global error handler
 process.on('uncaughtException', (error) => {
-  console.error(chalk.red('❌ Uncaught Exception:'), error.message);
+  log.errorWithDetail('❌ Uncaught Exception:', error);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error(chalk.red('❌ Unhandled Rejection at:'), promise, 'reason:', reason);
+  log.error(`❌ Unhandled Rejection at: ${promise}, reason: ${reason}`);
   process.exit(1);
 });
 

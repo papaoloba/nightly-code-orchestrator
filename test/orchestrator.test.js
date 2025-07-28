@@ -1,19 +1,19 @@
 // Jest globals are automatically available
-const { Orchestrator } = require('../src/orchestrator');
-const { TaskManager } = require('../src/task-manager');
-const { GitManager } = require('../src/git-manager');
-const { Validator } = require('../src/validator');
-const { Reporter } = require('../src/reporter');
-const { SuperClaudeIntegration } = require('../src/superclaude-integration');
+const { Orchestrator } = require('../src/core/orchestrator');
+const { TaskManager } = require('../src/core/task-manager');
+const { GitManager } = require('../src/integrations/git-manager');
+const { Validator } = require('../src/utils/validator');
+const { Reporter } = require('../src/utils/reporter');
+const { SuperClaudeIntegration } = require('../src/integrations/superclaude-integration');
 const fs = require('fs-extra');
 const path = require('path');
 
 // Mock dependencies
-jest.mock('../src/task-manager');
-jest.mock('../src/git-manager');
-jest.mock('../src/validator');
-jest.mock('../src/reporter');
-jest.mock('../src/superclaude-integration');
+jest.mock('../src/core/task-manager');
+jest.mock('../src/integrations/git-manager');
+jest.mock('../src/utils/validator');
+jest.mock('../src/utils/reporter');
+jest.mock('../src/integrations/superclaude-integration');
 jest.mock('fs-extra');
 
 describe('Orchestrator', () => {

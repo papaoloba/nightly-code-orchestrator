@@ -49,9 +49,7 @@ class PrettyLogger {
           return `${timestamp} [${level}]: ${message}`;
         })
       ),
-      transports: [
-        new winston.transports.Console()
-      ]
+      transports: [new winston.transports.Console()]
     });
   }
 
@@ -160,15 +158,15 @@ class PrettyLogger {
       [chalk.yellow.bold('📦 Terminal Log Prettifiers'), ''],
       [chalk.gray('Library'), chalk.gray('Description')],
       ['chalk', '🎨 Colorize text (bold, bg, underline, etc.)'],
-      ['', 'ex: chalk.green(\'Success!\')'],
+      ['', "ex: chalk.green('Success!')"],
       ['ora', '⏳ Spinners for async loading animations'],
-      ['', 'ex: ora(\'Loading...\').start()'],
+      ['', "ex: ora('Loading...').start()"],
       ['figlet', '🅰️  Big ASCII art text'],
-      ['', 'ex: figlet.textSync(\'Hello!\')'],
+      ['', "ex: figlet.textSync('Hello!')"],
       ['boxen', '📦 Boxed messages with style'],
-      ['', 'ex: boxen(\'Success\', {borderStyle: \'round\'})'],
+      ['', "ex: boxen('Success', {borderStyle: 'round'})"],
       ['signale', '🪵 Fancy logger with types & timestamps'],
-      ['', 'ex: signale.success(\'Done!\')'],
+      ['', "ex: signale.success('Done!')"],
       ['winston', '🏭 Robust logger for dev + prod'],
       ['', 'ex: winston.createLogger(...)']
     ];
@@ -191,9 +189,7 @@ class PrettyLogger {
         joinRight: '┤',
         joinJoin: '┼'
       },
-      spanningCells: [
-        { col: 0, row: 0, colSpan: 2, alignment: 'center' }
-      ],
+      spanningCells: [{ col: 0, row: 0, colSpan: 2, alignment: 'center' }],
       columns: {
         0: { width: 12, alignment: 'left' },
         1: { width: 52, alignment: 'left', wrapWord: false }
@@ -201,7 +197,10 @@ class PrettyLogger {
     };
 
     console.log(table(data, config));
-    console.log(chalk.yellow('💡 Tip: ') + chalk.white('Combine chalk + boxen + ora for powerful CLI UX!'));
+    console.log(
+      chalk.yellow('💡 Tip: ') +
+        chalk.white('Combine chalk + boxen + ora for powerful CLI UX!')
+    );
   }
 
   /**
@@ -220,7 +219,9 @@ class PrettyLogger {
       warn: (text) => spinner.warn(chalk.yellow(text)),
       info: (text) => spinner.info(chalk.blue(text)),
       stop: () => spinner.stop(),
-      text: (newText) => { spinner.text = newText; }
+      text: (newText) => {
+        spinner.text = newText;
+      }
     };
   }
 
@@ -347,7 +348,7 @@ class PrettyLogger {
   statusDashboard (title, items) {
     const rows = [[chalk.bold(title), '']];
 
-    items.forEach(item => {
+    items.forEach((item) => {
       const { label, value, status } = item;
       let statusIcon = '';
       let valueColor = 'white';
@@ -366,10 +367,7 @@ class PrettyLogger {
         valueColor = 'blue';
       }
 
-      rows.push([
-        `${statusIcon} ${label}`,
-        chalk[valueColor](value)
-      ]);
+      rows.push([`${statusIcon} ${label}`, chalk[valueColor](value)]);
     });
 
     const config = {
@@ -390,9 +388,7 @@ class PrettyLogger {
         joinRight: '╢',
         joinJoin: '┼'
       },
-      spanningCells: [
-        { col: 0, row: 0, colSpan: 2, alignment: 'center' }
-      ],
+      spanningCells: [{ col: 0, row: 0, colSpan: 2, alignment: 'center' }],
       columns: {
         0: { width: 25, alignment: 'left' },
         1: { width: 35, alignment: 'left' }

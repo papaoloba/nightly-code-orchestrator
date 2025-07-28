@@ -6,9 +6,7 @@ module.exports = {
     node: true,
     jest: true
   },
-  extends: [
-    'standard'
-  ],
+  extends: ['standard'],
   parserOptions: {
     ecmaVersion: 2020,
     sourceType: 'module'
@@ -29,12 +27,12 @@ module.exports = {
     'no-trailing-spaces': 'error',
     'eol-last': 'error',
     'comma-dangle': ['error', 'never'],
-    'semi': ['error', 'always'],
-    'quotes': ['error', 'single', { avoidEscape: true }],
-    'indent': ['error', 2, { SwitchCase: 1 }],
+    semi: ['error', 'always'],
+    quotes: ['error', 'single', { avoidEscape: true }],
+    indent: ['error', 2, { SwitchCase: 1 }],
     'max-len': ['warn', { code: 120, ignoreComments: true, ignoreUrls: true }],
     'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-    'camelcase': ['error', { properties: 'never', ignoreDestructuring: true }]
+    camelcase: ['error', { properties: 'never', ignoreDestructuring: true }]
   },
   overrides: [
     {

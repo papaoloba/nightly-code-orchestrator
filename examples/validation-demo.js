@@ -9,8 +9,8 @@
  * 3. More robust validation with detailed error reporting
  */
 
-const { Validator } = require('../src/validator');
-const { TaskManager } = require('../src/task-manager');
+const { Validator } = require('../src/utils/validator');
+const { TaskManager } = require('../src/core/task-manager');
 const fs = require('fs-extra');
 const path = require('path');
 const YAML = require('yaml');

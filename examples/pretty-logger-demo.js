@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const PrettyLogger = require('../src/pretty-logger');
+const PrettyLogger = require('../src/utils/pretty-logger');
 const chalk = require('chalk');
 
 // Create logger instance

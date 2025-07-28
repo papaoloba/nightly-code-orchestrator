@@ -46,7 +46,7 @@ tasks:
       - "Integration tests verify end-to-end functionality"
       - "API documentation is updated with new endpoints"
     
-    estimated_duration: 180  # 3 hours
+    minimum_duration: 180  # Optional: Forces iterative prompting until 3 hours is reached
     dependencies: []
     tags: ["backend", "security", "authentication"]
     files_to_modify:
@@ -97,7 +97,7 @@ tasks:
       - "Application can run for 24+ hours without memory issues"
       - "Performance benchmarks show no regression"
     
-    estimated_duration: 90  # 1.5 hours
+    minimum_duration: 90  # Optional: Forces iterative prompting until 1.5 hours is reached
     dependencies: []
     tags: ["bugfix", "performance", "memory"]
     files_to_modify:
@@ -148,7 +148,7 @@ tasks:
       - "Code passes all linting rules"
       - "Documentation is updated to reflect new architecture"
     
-    estimated_duration: 150  # 2.5 hours
+    minimum_duration: 150  # Optional: Forces iterative prompting until 2.5 hours is reached
     dependencies: []
     tags: ["refactor", "architecture", "maintainability"]
     files_to_modify:
@@ -212,7 +212,7 @@ tasks:
       - "Clear test documentation is provided"
       - "Tests follow established patterns and conventions"
     
-    estimated_duration: 120  # 2 hours
+    minimum_duration: 120  # Optional: Forces iterative prompting until 2 hours is reached
     dependencies: ["refactor-api-handlers"]
     tags: ["testing", "quality", "ci-cd"]
     files_to_modify:
@@ -264,7 +264,7 @@ tasks:
       - "Getting started guide helps new developers"
       - "Documentation passes accessibility checks"
     
-    estimated_duration: 75  # 1.25 hours
+    minimum_duration: 75  # Optional: Forces iterative prompting until 1.25 hours is reached
     dependencies: ["implement-user-auth"]
     tags: ["documentation", "api", "developer-experience"]
     files_to_modify:
@@ -295,7 +295,7 @@ tasks:
       - "Each criteria should be testable"
       - "Include both functional and non-functional requirements"
     
-    estimated_duration: 60  # in minutes
+    minimum_duration: 60  # Optional: Forces iterative prompting until duration is reached (in minutes)
     dependencies: []  # List of task IDs this depends on
     tags: ["tag1", "tag2"]  # Organizing tags
     files_to_modify:

@@ -38,7 +38,8 @@ module.exports.TIME = {
 module.exports.STORAGE = {
   BYTES_IN_GB: 1000000000,
   MIN_DISK_SPACE_GB: 1, // Minimum 1GB disk space required
-  MIN_DISK_SPACE_BYTES: 1000000000 // 1GB in bytes
+  MIN_DISK_SPACE_BYTES: 1000000000, // 1GB in bytes
+  MAX_OUTPUT_SIZE: 1000000 // 1MB max output size for iterative tasks
 };
 
 /**

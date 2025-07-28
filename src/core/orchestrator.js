@@ -7,13 +7,17 @@ const pidusage = require('pidusage');
 const YAML = require('yaml');
 
 const { TaskManager } = require('./task-manager');
-const { GitManager } = require('./git-manager');
-const { Validator } = require('./validator');
-const { Reporter } = require('./reporter');
-const { SuperClaudeIntegration } = require('./superclaude-integration');
-const { SUPERCLAUDE_OPTIMIZATION_GUIDE } = require('./superclaude-optimization-guide');
-const { TIME, STORAGE, RETRY } = require('./constants');
-const PrettyLogger = require('./pretty-logger');
+const { GitManager } = require('../integrations/git-manager');
+const { Validator } = require('../utils/validator');
+const { Reporter } = require('../utils/reporter');
+const {
+  SuperClaudeIntegration
+} = require('../integrations/superclaude-integration');
+const {
+  SUPERCLAUDE_OPTIMIZATION_GUIDE
+} = require('../integrations/superclaude-optimization-guide');
+const { TIME, STORAGE, RETRY } = require('../utils/constants');
+const PrettyLogger = require('../utils/pretty-logger');
 
 /**
  * Main orchestrator for nightly-claude-code automation
@@ -65,14 +69,16 @@ class Orchestrator extends EventEmitter {
       configPath: options.configPath || 'nightly-code.yaml',
       tasksPath: options.tasksPath || 'nightly-tasks.yaml',
       maxDuration: options.maxDuration || TIME.SECONDS.MAX_SESSION_DURATION,
-      checkpointInterval: options.checkpointInterval || TIME.SECONDS.DEFAULT_CHECKPOINT_INTERVAL,
+      checkpointInterval:
+        options.checkpointInterval || TIME.SECONDS.DEFAULT_CHECKPOINT_INTERVAL,
       dryRun: options.dryRun || false,
       resumeCheckpoint: options.resumeCheckpoint || null,
       workingDir: options.workingDir || process.cwd(),
       forceSuperclaude: options.forceSuperclaude || false, // CLI flag to force SuperClaude
       // Rate limiting and retry configuration
       rateLimitRetries: options.rateLimitRetries || RETRY.DEFAULT_RETRIES,
-      rateLimitBaseDelay: options.rateLimitBaseDelay || TIME.MS.RATE_LIMIT_BASE_DELAY,
+      rateLimitBaseDelay:
+        options.rateLimitBaseDelay || TIME.MS.RATE_LIMIT_BASE_DELAY,
       enableRetryOnLimits: options.enableRetryOnLimits !== false // Default to true
     };
 
@@ -87,6 +93,9 @@ class Orchestrator extends EventEmitter {
       claudeProcess: null,
       sessionId: this.generateSessionId()
     };
+
+    // Initialize operation timers
+    this.operationTimers = new Map();
 
     // Initialize pretty logger for enhanced UI
     this.prettyLogger = new PrettyLogger();
@@ -103,7 +112,11 @@ class Orchestrator extends EventEmitter {
    */
   generateSessionId () {
     const date = new Date().toISOString().split('T')[0];
-    const time = new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '');
+    const time = new Date()
+      .toISOString()
+      .split('T')[1]
+      .split('.')[0]
+      .replace(/:/g, '');
     return `session-${date}-${time}`;
   }
 
@@ -124,9 +137,10 @@ class Orchestrator extends EventEmitter {
     this.operationTimers.delete(operationName);
 
     const seconds = Math.round(duration / TIME.MS.ONE_SECOND);
-    const timeStr = seconds >= 60
-      ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
-      : `${seconds}s`;
+    const timeStr =
+      seconds >= 60
+        ? `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+        : `${seconds}s`;
 
     return ` \x1b[35m[took ${timeStr}]\x1b[0m`; // Magenta color for operation timing
   }
@@ -134,6 +148,174 @@ class Orchestrator extends EventEmitter {
   logWithTiming (level, message, operationName = null) {
     const timing = operationName ? this.endOperation(operationName) : '';
     this.logger[level](`${message}${timing}`);
+  }
+
+  // File-scoped logging methods
+  logSessionInfo (sessionInfo) {
+    this.logger.info(`  \x1b[35m🧠 SuperClaude\x1b[0m │ ${sessionInfo}`);
+  }
+
+  logClaudeOutput (line) {
+    if (line.includes('Wave') || line.includes('wave')) {
+      this.logger.info(`  \x1b[35m🤖 Claude\x1b[0m │ \x1b[35m${line}\x1b[0m`); // Magenta for waves
+    } else if (
+      line.includes('✅') ||
+      line.includes('Success') ||
+      line.includes('Completed')
+    ) {
+      this.logger.info(`  \x1b[32m🤖 Claude\x1b[0m │ \x1b[32m${line}\x1b[0m`); // Green for success
+    } else if (
+      line.includes('❌') ||
+      line.includes('Error') ||
+      line.includes('Failed')
+    ) {
+      this.logger.info(`  \x1b[31m🤖 Claude\x1b[0m │ \x1b[31m${line}\x1b[0m`); // Red for errors
+    } else if (line.includes('⚠️') || line.includes('Warning')) {
+      this.logger.info(`  \x1b[33m🤖 Claude\x1b[0m │ \x1b[33m${line}\x1b[0m`); // Yellow for warnings
+    } else {
+      this.logger.info(`  \x1b[36m🤖 Claude\x1b[0m │ ${line}`); // Cyan for robot icon, normal text
+    }
+  }
+
+  logClaudeError (line) {
+    this.logger.warn(`⚠️  Claude: ${line}`);
+  }
+
+  logValidationStatus (status, message) {
+    this.logger.info(`${status} ${message}`);
+  }
+
+  logTaskProgress (taskNum, totalTasks, message) {
+    this.logger.info(`📋 Task ${taskNum}/${totalTasks}: ${message}`);
+  }
+
+  logTaskStatus (label, value) {
+    this.displayInfo(`${label}: ${value}`);
+  }
+
+  logOperationStatus (icon, message) {
+    this.logger.info(`${icon} ${message}`);
+  }
+
+  logDebug (message, data) {
+    this.logger.debug(message, data);
+  }
+
+  logWarn (message, data = {}) {
+    this.logger.warn(message, data);
+  }
+
+  logError (message, data = {}) {
+    this.logger.error(message, data);
+  }
+
+  logInfo (message, data = {}) {
+    this.logger.info(message, data);
+  }
+
+  logSuperclaude (mode, message) {
+    this.logger.info(
+      `  \x1b[${mode === 'framework' ? '35' : '36'}m🧠 ${
+        mode === 'framework' ? 'SuperClaude Framework' : 'Standard mode'
+      }\x1b[0m │ ${message}`
+    );
+  }
+
+  logPromptOptimization (message) {
+    this.logger.info(
+      `  \x1b[32m✅ Prompt optimized\x1b[0m │ \x1b[1m${message}\x1b[0m`
+    );
+  }
+
+  // File-scoped UI/display methods
+  clearScreen () {
+    console.clear();
+  }
+
+  newLine () {
+    console.log();
+  }
+
+  displayBanner (title, style = 'Standard') {
+    this.prettyLogger.banner(title, style);
+  }
+
+  displayDivider (char = '\u2500', length = 60, color = 'gray') {
+    this.prettyLogger.divider(char, length, color);
+  }
+
+  displayBox (content, options = {}) {
+    this.prettyLogger.box(content, options);
+  }
+
+  displayTable (data, options = {}) {
+    this.prettyLogger.table(data, options);
+  }
+
+  displayInfo (message) {
+    this.prettyLogger.info(message);
+  }
+
+  displaySuccess (message) {
+    this.prettyLogger.success(message);
+  }
+
+  displaySessionHeader () {
+    this.clearScreen();
+    this.displayBanner('Nightly Code', 'Standard');
+    this.displayDivider('\u2550', 60, 'cyan');
+    this.newLine();
+  }
+
+  displaySessionInfo () {
+    // Show session info in a styled box
+    const workingDirDisplay =
+      this.options.workingDir.length > 45
+        ? `📁 Working Directory:\n    ${this.options.workingDir}`
+        : `📁 Working Directory: ${this.options.workingDir}`;
+
+    this.prettyLogger.box(
+      [
+        '🌙 Nightly Code Orchestration Session',
+        '',
+        `📋 Session ID: ${this.state.sessionId}`,
+        workingDirDisplay,
+        `⏱️  Max Duration: ${Math.round(
+          this.options.maxDuration / 3600
+        )} hours`,
+        `🔄 Mode: ${this.options.dryRun ? 'DRY RUN' : 'LIVE'}`
+      ].join('\n'),
+      {
+        borderStyle: 'double',
+        borderColor: this.options.dryRun ? 'yellow' : 'blue',
+        padding: 1,
+        align: 'left'
+      }
+    );
+    console.log();
+
+    this.state.startTime = Date.now();
+  }
+
+  displayTaskHeader (taskNum, totalTasks, task) {
+    this.newLine();
+    this.displayDivider('\u2550', 60, 'blue');
+    this.displayInfo(
+      `\ud83d\udccb Task ${taskNum}/${totalTasks}: ${task.title}`
+    );
+    this.displayDivider('\u2500', 60, 'gray');
+    this.displayInfo(`\ud83d\udd27 Type: ${task.type}`);
+    this.displayInfo(
+      `\u23f1\ufe0f  Minimum duration: ${
+        task.minimum_duration || 'None specified'
+      } minutes`
+    );
+    this.displayInfo(`\ud83c\udd94 ID: ${task.id}`);
+  }
+
+  displayFinalSummary () {
+    this.newLine();
+    this.displayDivider('\u2550', 60, 'cyan');
   }
 
   /**
@@ -161,19 +343,24 @@ class Orchestrator extends EventEmitter {
     });
 
     // Custom format for console output
-    const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
-      // Add elapsed time since start if available
-      let elapsedInfo = '';
-      if (this.state.startTime) {
-        const elapsed = Math.round((Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND);
-        const minutes = Math.floor(elapsed / 60);
-        const seconds = elapsed % 60;
-        const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-        elapsedInfo = ` \x1b[36m(+${timeStr})\x1b[0m`; // Cyan color for elapsed time
-      }
+    const consoleFormat = winston.format.printf(
+      ({ level, message, timestamp }) => {
+        // Add elapsed time since start if available
+        let elapsedInfo = '';
+        if (this.state.startTime) {
+          const elapsed = Math.round(
+            (Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND
+          );
+          const minutes = Math.floor(elapsed / 60);
+          const seconds = elapsed % 60;
+          const timeStr =
+            minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+          elapsedInfo = ` \x1b[36m(+${timeStr})\x1b[0m`; // Cyan color for elapsed time
+        }
 
-      return `${timestamp}${elapsedInfo} ${level}: ${message}`;
-    });
+        return `${timestamp}${elapsedInfo} ${level}: ${message}`;
+      }
+    );
 
     this.logger = winston.createLogger({
       level: 'info',
@@ -201,7 +388,10 @@ class Orchestrator extends EventEmitter {
 
   async loadConfigurationFile () {
     try {
-      const configPath = path.resolve(this.options.workingDir, this.options.configPath);
+      const configPath = path.resolve(
+        this.options.workingDir,
+        this.options.configPath
+      );
 
       if (await fs.pathExists(configPath)) {
         const content = await fs.readFile(configPath, 'utf8');
@@ -215,13 +405,19 @@ class Orchestrator extends EventEmitter {
 
         // Update rate limiting options from config
         if (config.rate_limiting) {
-          this.options.rateLimitRetries = config.rate_limiting.max_retries || this.options.rateLimitRetries;
-          this.options.rateLimitBaseDelay = config.rate_limiting.base_delay || this.options.rateLimitBaseDelay;
-          this.options.enableRetryOnLimits = config.rate_limiting.enabled !== false;
-          this.options.usageLimitRetry = config.rate_limiting.usage_limit_retry !== false;
-          this.options.rateLimitRetry = config.rate_limiting.rate_limit_retry !== false;
+          this.options.rateLimitRetries =
+            config.rate_limiting.max_retries || this.options.rateLimitRetries;
+          this.options.rateLimitBaseDelay =
+            config.rate_limiting.base_delay || this.options.rateLimitBaseDelay;
+          this.options.enableRetryOnLimits =
+            config.rate_limiting.enabled !== false;
+          this.options.usageLimitRetry =
+            config.rate_limiting.usage_limit_retry !== false;
+          this.options.rateLimitRetry =
+            config.rate_limiting.rate_limit_retry !== false;
           this.options.maxDelay = config.rate_limiting.max_delay || 18000000;
-          this.options.exponentialBackoff = config.rate_limiting.exponential_backoff !== false;
+          this.options.exponentialBackoff =
+            config.rate_limiting.exponential_backoff !== false;
           this.options.jitter = config.rate_limiting.jitter !== false;
         }
 
@@ -237,13 +433,13 @@ class Orchestrator extends EventEmitter {
             task_management: 'hierarchical',
             integration_level: 'deep'
           };
-          this.logger.info('  \x1b[35m🧠 SuperClaude\x1b[0m │ Mode enabled via CLI flag');
+          this.logSessionInfo('Mode enabled via CLI flag');
         }
 
         return config;
       }
     } catch (error) {
-      this.logger.warn(`Could not load configuration file: ${error.message}`);
+      this.logWarn(`Could not load configuration file: ${error.message}`);
     }
 
     // Apply CLI override even if no config file exists
@@ -255,7 +451,7 @@ class Orchestrator extends EventEmitter {
         task_management: 'hierarchical',
         integration_level: 'deep'
       };
-      this.logger.info('🧠 SuperClaude mode enabled via CLI flag');
+      this.logInfo('🧠 SuperClaude mode enabled via CLI flag');
     }
 
     return null;
@@ -263,7 +459,7 @@ class Orchestrator extends EventEmitter {
 
   async initializeSuperClaude () {
     if (!this.superclaudeConfig?.enabled) {
-      this.logger.debug('SuperClaude integration not enabled');
+      this.logDebug('SuperClaude integration not enabled');
       return;
     }
 
@@ -319,31 +515,9 @@ class Orchestrator extends EventEmitter {
    */
   async run () {
     try {
-      // Display fancy banner
-      console.clear();
-      this.prettyLogger.banner('Nightly Code', 'Standard');
-      this.prettyLogger.divider('═', 60, 'cyan');
-      console.log();
+      this.displaySessionHeader();
 
-      // Show session info in a styled box
-      const workingDirDisplay = this.options.workingDir.length > 45
-        ? `📁 Working Directory:\n    ${this.options.workingDir}`
-        : `📁 Working Directory: ${this.options.workingDir}`;
-
-      this.prettyLogger.box([
-        '🌙 Nightly Code Orchestration Session',
-        '',
-        `📋 Session ID: ${this.state.sessionId}`,
-        workingDirDisplay,
-        `⏱️  Max Duration: ${Math.round(this.options.maxDuration / 3600)} hours`,
-        `🔄 Mode: ${this.options.dryRun ? 'DRY RUN' : 'LIVE'}`
-      ].join('\n'), {
-        borderStyle: 'double',
-        borderColor: this.options.dryRun ? 'yellow' : 'blue',
-        padding: 1,
-        align: 'left'
-      });
-      console.log();
+      this.displaySessionInfo();
 
       this.state.startTime = Date.now();
 
@@ -359,7 +533,12 @@ class Orchestrator extends EventEmitter {
         autoPush: fullConfig?.git?.auto_push !== false,
         createPR: fullConfig?.git?.create_pr !== false,
         prTemplate: fullConfig?.git?.pr_template || null,
-        prStrategy: this.options.prStrategy || fullConfig?.git?.pr_strategy || 'task' // Default to task-based PRs
+        prStrategy:
+          this.options.prStrategy || fullConfig?.git?.pr_strategy || 'task', // Default to task-based PRs
+        // Dependency-aware branching configuration
+        dependencyAwareBranching: fullConfig?.git?.dependency_aware_branching !== false, // Default enabled
+        mergeDependencyChains: fullConfig?.git?.merge_dependency_chains || false,
+        strictDependencyChecking: fullConfig?.git?.strict_dependency_checking || false
       });
 
       // Initialize SuperClaude integration if enabled
@@ -390,7 +569,7 @@ class Orchestrator extends EventEmitter {
 
       return this.generateFinalReport();
     } catch (error) {
-      this.logger.error(`💥 Orchestration session failed: ${error.message}`);
+      this.logError(`💥 Orchestration session failed: ${error.message}`);
       await this.handleFailure(error);
       throw error;
     }
@@ -398,96 +577,126 @@ class Orchestrator extends EventEmitter {
 
   async validateEnvironment () {
     this.startOperation('environment-validation');
-    this.prettyLogger.info('🔧 Validating Environment');
-    this.prettyLogger.divider('─', 30, 'gray');
+    this.displayInfo('🔧 Validating Environment');
+    this.displayDivider('─', 30, 'gray');
 
     // Check if Claude Code is available
     try {
-      const result = await this.executeCommand('claude', ['--version'], { timeout: 10000 });
-      this.logger.info(`✅ Claude Code: ${result.stdout.trim()}`);
+      const result = await this.executeCommand('claude', ['--version'], {
+        timeout: 10000
+      });
+      this.logValidationStatus('✅', `Claude Code: ${result.stdout.trim()}`);
     } catch (error) {
-      throw new Error('❌ Claude Code CLI not found. Please install claude-code first.');
+      throw new Error(
+        '❌ Claude Code CLI not found. Please install claude-code first.'
+      );
     }
 
     // Validate configuration
-    this.logger.info('🔍 Validating configuration...');
+    this.logInfo('🔍 Validating configuration...');
     const validation = await this.validator.validateAll();
     if (!validation.valid) {
-      throw new Error(`❌ Configuration validation failed: ${validation.errors.map(e => e.message).join(', ')}`);
+      throw new Error(
+        `❌ Configuration validation failed: ${validation.errors
+          .map((e) => e.message)
+          .join(', ')}`
+      );
     }
-    this.logger.info('✅ Configuration is valid');
+    this.logValidationStatus('✅', 'Configuration is valid');
 
     // Check available disk space
     const freeSpace = await this.getAvailableDiskSpace();
     const freeSpaceGB = Math.round(freeSpace / STORAGE.BYTES_IN_GB);
     if (freeSpace < STORAGE.MIN_DISK_SPACE_BYTES) {
-      this.logger.warn(`⚠️  Low disk space: ${freeSpaceGB}GB available`);
+      this.logWarn(`⚠️  Low disk space: ${freeSpaceGB}GB available`);
     } else {
-      this.logger.info(`💾 Disk space: ${freeSpaceGB}GB available`);
+      this.logInfo(`💾 Disk space: ${freeSpaceGB}GB available`);
     }
 
     // Validate GitManager is initialized
     if (!this.gitManager) {
-      throw new Error('GitManager not initialized. Configuration loading may have failed.');
+      throw new Error(
+        'GitManager not initialized. Configuration loading may have failed.'
+      );
     }
 
     // Initialize git if needed
     await this.gitManager.ensureRepository();
 
     // Create session branch only if using session PR strategy
-    if (!this.options.dryRun && this.gitManager.options.prStrategy === 'session') {
+    if (
+      !this.options.dryRun &&
+      this.gitManager.options.prStrategy === 'session'
+    ) {
       await this.gitManager.createSessionBranch(this.state.sessionId);
-    } else if (!this.options.dryRun && this.gitManager.options.prStrategy === 'task') {
-      this.logger.info('🌿 Task-based PR strategy - branches will be created per task');
+    } else if (
+      !this.options.dryRun &&
+      this.gitManager.options.prStrategy === 'task'
+    ) {
+      this.logInfo(
+        '🌿 Task-based PR strategy - branches will be created per task'
+      );
     } else {
-      this.logger.info('🔄 Dry run mode - skipping branch creation');
+      this.logInfo('🔄 Dry run mode - skipping branch creation');
     }
 
-    this.logWithTiming('info', '✅ Environment validation completed', 'environment-validation');
-    this.logger.info('');
+    this.logWithTiming(
+      'info',
+      '✅ Environment validation completed',
+      'environment-validation'
+    );
+    this.logInfo('');
   }
 
   async loadTasks () {
     this.startOperation('task-loading');
-    this.prettyLogger.info('📋 Loading Tasks');
-    this.prettyLogger.divider('─', 30, 'gray');
+    this.displayInfo('📋 Loading Tasks');
+    this.displayDivider('─', 30, 'gray');
 
     const tasks = await this.taskManager.loadTasks();
     const orderedTasks = await this.taskManager.resolveDependencies(tasks);
 
     const totalTasks = orderedTasks.length;
-    const estimatedDuration = orderedTasks.reduce((sum, task) => sum + (task.estimated_duration || 0), 0);
+    const totalMinimumDuration = orderedTasks.reduce(
+      (sum, task) => sum + (task.minimum_duration || 0),
+      0
+    );
 
-    this.prettyLogger.success(`✅ Loaded ${totalTasks} tasks`);
-    this.prettyLogger.info(`⏱️  Estimated duration: ${Math.round(estimatedDuration)} minutes`);
+    this.displaySuccess(`✅ Loaded ${totalTasks} tasks`);
+    this.displayInfo(
+      `⏱️  Total minimum duration: ${Math.round(totalMinimumDuration)} minutes`
+    );
 
     // Show task overview in a pretty table
     if (orderedTasks.length > 0) {
-      console.log();
-      const tableData = [
-        ['#', 'Priority', 'Task', 'Duration', 'Type']
-      ];
+      this.newLine();
+      const tableData = [['#', 'Priority', 'Task', 'Min Duration', 'Type']];
 
       orderedTasks.forEach((task, index) => {
         const priority = task.priority || 'medium';
-        const priorityIcon = priority === 'high' ? '🔴 High' : priority === 'low' ? '🟢 Low' : '🟡 Medium';
+        const priorityIcon =
+          priority === 'high'
+            ? '🔴 High'
+            : priority === 'low'
+              ? '🟢 Low'
+              : '🟡 Medium';
         tableData.push([
           `${index + 1}`,
           priorityIcon,
           task.title,
-          `${task.estimated_duration || 60}m`,
+          task.minimum_duration ? `${task.minimum_duration}m` : 'none',
           task.type || 'general'
         ]);
       });
 
-      this.prettyLogger.table(tableData, {
+      this.displayTable(tableData, {
         columnWidths: [4, 12, 40, 10, 12],
         align: ['center', 'center', 'left', 'center', 'center']
       });
     }
 
     this.logWithTiming('info', '', 'task-loading'); // Just show timing without duplicate message
-    console.log();
+    this.newLine();
     return orderedTasks;
   }
 
@@ -499,8 +708,11 @@ class Orchestrator extends EventEmitter {
       totalTasks: tasks.length
     };
 
-    this.logger.info('🎯 Executing Tasks');
-    this.logger.info('═══════════════════');
+    // Build a map of completed tasks for dependency tracking
+    const completedTasksMap = new Map();
+
+    this.logInfo('🎯 Executing Tasks');
+    this.logInfo('═══════════════════');
 
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
@@ -509,9 +721,12 @@ class Orchestrator extends EventEmitter {
 
       try {
         // Check time remaining
-        const elapsed = (Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND;
+        const elapsed =
+          (Date.now() - this.state.startTime) / TIME.MS.ONE_SECOND;
         if (elapsed >= this.options.maxDuration) {
-          this.logger.warn(`⏰ Maximum session duration reached (${Math.round(elapsed)}s)`);
+          this.logWarn(
+            `⏰ Maximum session duration reached (${Math.round(elapsed)}s)`
+          );
           break;
         }
 
@@ -520,17 +735,12 @@ class Orchestrator extends EventEmitter {
         this.startOperation(taskOperationName);
 
         // Task header with pretty display
-        console.log();
-        this.prettyLogger.divider('═', 60, 'blue');
-        this.prettyLogger.info(`📋 Task ${taskNum}/${totalTasks}: ${task.title}`);
-        this.prettyLogger.divider('─', 60, 'gray');
-        this.prettyLogger.info(`🔧 Type: ${task.type}`);
-        this.prettyLogger.info(`⏱️  Estimated: ${task.estimated_duration || 60} minutes`);
-        this.prettyLogger.info(`🆔 ID: ${task.id}`);
+        this.displayTaskHeader(taskNum, totalTasks, task);
 
-        // Create task branch if using task-based PR strategy
+        // Create task branch with dependency awareness
+        let taskBranchName = null;
         if (!this.options.dryRun) {
-          const branchName = await this.gitManager.createTaskBranch(task);
+          taskBranchName = await this.gitManager.createTaskBranch(task, completedTasksMap);
         }
 
         // Execute task with Claude Code
@@ -538,7 +748,10 @@ class Orchestrator extends EventEmitter {
 
         if (taskResult.success) {
           // Validate task completion
-          const validation = await this.validateTaskCompletion(task, taskResult);
+          const validation = await this.validateTaskCompletion(
+            task,
+            taskResult
+          );
 
           if (validation.passed) {
             // Commit changes to task branch (skip in dry-run mode)
@@ -548,20 +761,27 @@ class Orchestrator extends EventEmitter {
               // Create individual PR if using task-based strategy
               if (this.gitManager.options.prStrategy === 'task') {
                 try {
-                  const prUrl = await this.gitManager.createTaskPR(task, taskResult);
+                  const prUrl = await this.gitManager.createTaskPR(
+                    task,
+                    taskResult
+                  );
                   if (prUrl) {
                     task.prUrl = prUrl;
-                    this.logger.info(`🎯 Task PR created: ${prUrl}`);
+                    this.logOperationStatus('🎯', `Task PR created: ${prUrl}`);
                   } else {
-                    this.logger.warn(`⚠️  PR creation skipped for task ${task.id}`);
+                    this.logWarn(`⚠️  PR creation skipped for task ${task.id}`);
                   }
                 } catch (error) {
-                  this.logger.error(`❌ Failed to create PR for task ${task.id}: ${error.message}`);
+                  this.logError(
+                    `❌ Failed to create PR for task ${task.id}: ${error.message}`
+                  );
                   // Continue execution, PR creation is not critical for task completion
                 }
               }
             } else {
-              this.logger.info('🔄 Dry run mode - skipping task commit and PR creation');
+              this.logInfo(
+                '🔄 Dry run mode - skipping task commit and PR creation'
+              );
             }
 
             this.state.completedTasks.push({
@@ -569,19 +789,35 @@ class Orchestrator extends EventEmitter {
               result: taskResult,
               validation,
               completedAt: Date.now(),
-              prUrl: task.prUrl
+              prUrl: task.prUrl,
+              branchName: taskBranchName
+            });
+
+            // Add to completed tasks map for dependency tracking
+            completedTasksMap.set(task.id, {
+              taskId: task.id,
+              branchName: taskBranchName,
+              completedAt: Date.now()
             });
 
             results.completed++;
-            this.logWithTiming('info', `🎉 Task ${taskNum}/${totalTasks} completed successfully!`, taskOperationName);
+            this.logWithTiming(
+              'info',
+              `🎉 Task ${taskNum}/${totalTasks} completed successfully!`,
+              taskOperationName
+            );
           } else {
-            throw new Error(`Task validation failed: ${validation.errors.join(', ')}`);
+            throw new Error(
+              `Task validation failed: ${validation.errors.join(', ')}`
+            );
           }
         } else {
           throw new Error(`Task execution failed: ${taskResult.error}`);
         }
       } catch (error) {
-        this.logger.error(`❌ Task ${taskNum}/${totalTasks} failed: ${error.message}`);
+        this.logError(
+          `❌ Task ${taskNum}/${totalTasks} failed: ${error.message}`
+        );
 
         this.state.failedTasks.push({
           task,
@@ -595,12 +831,12 @@ class Orchestrator extends EventEmitter {
         if (!this.options.dryRun) {
           await this.gitManager.revertTaskChanges(task);
         } else {
-          this.logger.info('🔄 Dry run mode - skipping task revert');
+          this.logInfo('🔄 Dry run mode - skipping task revert');
         }
 
         // Continue with next task unless critical failure
         if (this.isCriticalFailure(error)) {
-          this.logger.error('💥 Critical failure detected, stopping execution');
+          this.logError('💥 Critical failure detected, stopping execution');
           break;
         }
       }
@@ -627,7 +863,7 @@ class Orchestrator extends EventEmitter {
   async handleAutomaticImprovements (results) {
     // Only run automatic improvements if all original tasks completed successfully
     if (results.failed > 0) {
-      this.logger.info('⚠️  Skipping automatic improvements due to failed tasks');
+      this.logInfo('⚠️  Skipping automatic improvements due to failed tasks');
       return;
     }
 
@@ -637,47 +873,73 @@ class Orchestrator extends EventEmitter {
     const minimumTimeForImprovement = 300; // 5 minutes minimum
 
     if (remainingTime < minimumTimeForImprovement) {
-      this.logger.info(`⏰ Insufficient time remaining for automatic improvements (${Math.round(remainingTime)}s < ${minimumTimeForImprovement}s)`);
+      this.logInfo(
+        `⏰ Insufficient time remaining for automatic improvements (${Math.round(
+          remainingTime
+        )}s < ${minimumTimeForImprovement}s)`
+      );
       return;
     }
 
-    this.logger.info('');
-    this.logger.info('🚀 All tasks completed successfully! Starting automatic improvements...');
-    this.prettyLogger.divider('═', 60, 'green');
-    this.logger.info(`⏱️  Time remaining: ${Math.round(remainingTime / 60)} minutes`);
-    this.logger.info('');
+    this.logInfo('');
+    this.logInfo(
+      '🚀 All tasks completed successfully! Starting automatic improvements...'
+    );
+    this.displayDivider('═', 60, 'green');
+    this.logInfo(
+      `⏱️  Time remaining: ${Math.round(remainingTime / 60)} minutes`
+    );
+    this.logInfo('');
 
     try {
       // Create an automatic improvement task
-      const improvementTask = await this.createAutomaticImprovementTask(remainingTime);
+      const improvementTask = await this.createAutomaticImprovementTask(
+        remainingTime
+      );
 
       if (improvementTask) {
         this.state.currentTask = improvementTask;
 
-        this.prettyLogger.box([
-          '✨ Automatic Code Improvement Session',
-          `⏱️  Available time: ${Math.round(remainingTime / 60)} minutes`,
-          '🎯 Focus: General code quality and optimization'
-        ].join('\n'), {
-          borderStyle: 'double',
-          borderColor: 'green',
-          padding: 1,
-          align: 'left'
-        });
+        this.displayBox(
+          [
+            '✨ Automatic Code Improvement Session',
+            `⏱️  Available time: ${Math.round(remainingTime / 60)} minutes`,
+            '🎯 Focus: General code quality and optimization'
+          ].join('\n'),
+          {
+            borderStyle: 'double',
+            borderColor: 'green',
+            padding: 1,
+            align: 'left'
+          }
+        );
 
         // Execute the improvement task
-        const improvementResult = await this.executeAutomaticImprovementTask(improvementTask);
+        const improvementResult = await this.executeAutomaticImprovementTask(
+          improvementTask
+        );
 
         if (improvementResult.success) {
           // Validate and commit the improvements
-          const validation = await this.validateTaskCompletion(improvementTask, improvementResult);
+          const validation = await this.validateTaskCompletion(
+            improvementTask,
+            improvementResult
+          );
 
           if (validation.passed) {
             if (!this.options.dryRun) {
-              await this.gitManager.commitTask(improvementTask, improvementResult);
-              this.logger.info('✅ Automatic improvements committed successfully');
+              await this.gitManager.commitTask(
+                improvementTask,
+                improvementResult
+              );
+              this.logValidationStatus(
+                '✅',
+                'Automatic improvements committed successfully'
+              );
             } else {
-              this.logger.info('🔄 Dry run mode - skipping automatic improvement commit');
+              this.logInfo(
+                '🔄 Dry run mode - skipping automatic improvement commit'
+              );
             }
 
             // Update results
@@ -690,21 +952,26 @@ class Orchestrator extends EventEmitter {
               automatic: true
             });
 
-            this.logger.info('🎉 Automatic improvement session completed successfully!');
+            this.logOperationStatus(
+              '🎉',
+              'Automatic improvement session completed successfully!'
+            );
           } else {
-            this.logger.warn('⚠️  Automatic improvement validation failed, reverting changes');
+            this.logWarn(
+              '⚠️  Automatic improvement validation failed, reverting changes'
+            );
             if (!this.options.dryRun) {
               await this.gitManager.revertTaskChanges(improvementTask);
             }
           }
         } else {
-          this.logger.warn('⚠️  Automatic improvement execution failed');
+          this.logWarn('⚠️  Automatic improvement execution failed');
         }
 
         this.state.currentTask = null;
       }
     } catch (error) {
-      this.logger.error(`❌ Automatic improvement failed: ${error.message}`);
+      this.logError(`❌ Automatic improvement failed: ${error.message}`);
       this.state.currentTask = null;
     }
   }
@@ -742,7 +1009,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         'Changes follow project conventions',
         'Improvements are well-documented'
       ],
-      estimated_duration: Math.round(improvementDuration / 60),
+      minimum_duration: Math.round(improvementDuration / 60),
       dependencies: [],
       tags: ['automatic', 'improvement', 'quality'],
       files_to_modify: [],
@@ -764,22 +1031,30 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     let prompt;
 
     // Use SuperClaude improve command if available
-    if (this.superclaudeConfig?.enabled && this.superclaudeIntegration?.isEnabled()) {
-      this.logger.info('🧠 Using SuperClaude /sc:improve command for automatic improvements');
-      prompt = '/sc:improve --scope project --focus quality --iterative --validate';
+    if (
+      this.superclaudeConfig?.enabled &&
+      this.superclaudeIntegration?.isEnabled()
+    ) {
+      this.logInfo(
+        '🧠 Using SuperClaude /sc:improve command for automatic improvements'
+      );
+      prompt =
+        '/sc:improve --scope project --focus quality --iterative --validate';
     } else {
       // Fallback to standard improvement prompt
-      this.logger.info('🤖 Using standard improvement approach');
+      this.logInfo('🤖 Using standard improvement approach');
       prompt = await this.generateTaskPrompt(task);
     }
 
-    const timeoutMs = task.estimated_duration * 60 * TIME.MS.ONE_SECOND;
+    const timeoutMs = (task.minimum_duration || 60) * 60 * TIME.MS.ONE_SECOND;
 
     try {
       const startTime = Date.now();
 
       if (this.options.dryRun) {
-        this.logger.info('🔄 Dry run mode - skipping actual automatic improvement execution');
+        this.logInfo(
+          '🔄 Dry run mode - skipping actual automatic improvement execution'
+        );
         return {
           success: true,
           output: 'Dry run - automatic improvement task not actually executed',
@@ -797,17 +1072,21 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
       const duration = Date.now() - startTime;
       const durationSeconds = Math.round(duration / TIME.MS.ONE_SECOND);
-      
       // Add 30 second delay to allow file system to settle
-      this.logger.info('⏳ Waiting 30 seconds for file system to settle...');
-      await new Promise(resolve => setTimeout(resolve, 30000));
+      this.logInfo('⏳ Waiting 30 seconds for file system to settle...');
+      await new Promise((resolve) => setTimeout(resolve, 30000));
 
       // Analyze changes made by Claude Code
       const filesChanged = await this.gitManager.getChangedFiles();
 
-      this.logger.info(`✅ Automatic improvement completed in ${durationSeconds}s`);
+      this.logValidationStatus(
+        '✅',
+        `Automatic improvement completed in ${durationSeconds}s`
+      );
       if (filesChanged.length > 0) {
-        this.logger.info(`📝 ${filesChanged.length} files were modified during improvements`);
+        this.logInfo(
+          `📝 ${filesChanged.length} files were modified during improvements`
+        );
       }
 
       return {
@@ -819,7 +1098,9 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         automatic: true
       };
     } catch (error) {
-      this.logger.error(`💥 Automatic improvement execution failed: ${error.message}`);
+      this.logError(
+        `💥 Automatic improvement execution failed: ${error.message}`
+      );
       return {
         success: false,
         error: error.message,
@@ -831,24 +1112,25 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
   }
 
   async executeTask (task) {
-    const timeoutMs = (task.estimated_duration || TIME.SECONDS.DEFAULT_TASK_DURATION_MINUTES) * 60 * TIME.MS.ONE_SECOND; // Convert minutes to milliseconds
-    const prompt = await this.generateTaskPrompt(task);
+    // For tasks with minimum_duration, we'll iteratively prompt Claude until minimum time is reached
+    const hasMinimumDuration =
+      task.minimum_duration && task.minimum_duration > 0;
+    const minimumDurationMs = task.minimum_duration
+      ? task.minimum_duration * 60 * TIME.MS.ONE_SECOND
+      : 0;
+    const baseTimeoutMs =
+      TIME.SECONDS.DEFAULT_TASK_DURATION_MINUTES * 60 * TIME.MS.ONE_SECOND;
 
-    const timeoutMinutes = Math.round(timeoutMs / TIME.MS.ONE_MINUTE);
-    console.log();
-    this.prettyLogger.box([
-      '🤖 Executing task with Claude Code',
-      `⏱️  Timeout: ${timeoutMinutes} minutes`
-    ].join('\n'), {
-      borderStyle: 'single',
-      borderColor: 'yellow',
-      padding: 1,
-      align: 'left'
-    });
+    const totalStartTime = Date.now();
+    let totalOutput = '';
+    let totalFilesChanged = [];
+    let iterationCount = 0;
+    let taskCompleted = false;
+    const MAX_ITERATIONS = 50; // Safeguard against infinite loops
 
     try {
       if (this.options.dryRun) {
-        this.logger.info('🔄 Dry run mode - skipping actual execution');
+        this.logInfo('🔄 Dry run mode - skipping actual execution');
         return {
           success: true,
           output: 'Dry run - task not actually executed',
@@ -857,43 +1139,160 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         };
       }
 
-      const startTime = Date.now();
-      this.logger.info('⚡ Starting Claude Code execution...');
+      // Initial execution
+      do {
+        iterationCount++;
+        
+        // Safeguard against infinite loops
+        if (iterationCount > MAX_ITERATIONS) {
+          this.logWarn(`⚠️  Maximum iteration limit (${MAX_ITERATIONS}) reached. Stopping execution.`);
+          taskCompleted = true;
+          break;
+        }
+        
+        const elapsedMs = Date.now() - totalStartTime;
+        const remainingMs = minimumDurationMs - elapsedMs;
 
-      // Execute Claude Code with the generated prompt
-      const result = await this.executeClaudeCode(prompt, {
-        timeout: timeoutMs,
-        workingDir: this.options.workingDir
-      });
+        // Calculate timeout for this iteration
+        const iterationTimeoutMs =
+          hasMinimumDuration && remainingMs > 0
+            ? Math.min(baseTimeoutMs, remainingMs)
+            : baseTimeoutMs;
 
-      const duration = Date.now() - startTime;
-      const durationSeconds = Math.round(duration / TIME.MS.ONE_SECOND);
+        const iterationTimeoutMinutes = Math.round(
+          iterationTimeoutMs / TIME.MS.ONE_MINUTE
+        );
 
-      // Analyze changes made by Claude Code
-      const filesChanged = await this.gitManager.getChangedFiles();
+        this.newLine();
+        this.displayBox(
+          [
+            `🤖 Executing task with Claude Code${
+              hasMinimumDuration ? ` (Iteration ${iterationCount})` : ''
+            }`,
+            `⏱️  Timeout: ${iterationTimeoutMinutes} minutes`,
+            hasMinimumDuration
+              ? `⏳ Minimum duration: ${task.minimum_duration} minutes`
+              : '',
+            hasMinimumDuration && elapsedMs > 0
+              ? `⏰ Elapsed: ${Math.round(
+                elapsedMs / TIME.MS.ONE_MINUTE
+              )} minutes`
+              : ''
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          {
+            borderStyle: 'single',
+            borderColor: hasMinimumDuration ? 'magenta' : 'yellow',
+            padding: 1,
+            align: 'left'
+          }
+        );
 
-      this.logger.info(`✅ Claude Code execution completed in ${durationSeconds}s`);
-      if (filesChanged.length > 0) {
-        this.logger.info(`📝 ${filesChanged.length} files were modified`);
+        // Generate prompt for this iteration
+        const prompt = await this.generateIterativeTaskPrompt(
+          task,
+          iterationCount,
+          totalOutput,
+          totalFilesChanged
+        );
+
+        this.logInfo(
+          `⚡ Starting Claude Code execution (iteration ${iterationCount})...`
+        );
+
+        // Execute Claude Code with the generated prompt
+        const result = await this.executeClaudeCode(prompt, {
+          timeout: iterationTimeoutMs,
+          workingDir: this.options.workingDir
+        });
+
+        const iterationDuration = Date.now() - totalStartTime;
+        const iterationDurationSeconds = Math.round(
+          iterationDuration / TIME.MS.ONE_SECOND
+        );
+
+        // Analyze changes made by Claude Code in this iteration
+        const iterationFilesChanged = await this.gitManager.getChangedFiles();
+
+        // Accumulate results
+        totalOutput +=
+          (totalOutput ? `\n\n--- Iteration ${iterationCount} ---\n` : '') +
+          result.stdout;
+        
+        // Check for output size limit to prevent memory issues
+        if (totalOutput.length > STORAGE.MAX_OUTPUT_SIZE) {
+          const truncateAt = STORAGE.MAX_OUTPUT_SIZE / 2;
+          totalOutput = '...[Output truncated due to size limit]...\n' + 
+                       totalOutput.slice(-truncateAt);
+          this.logWarn('⚠️  Output truncated to prevent memory exhaustion');
+        }
+        
+        totalFilesChanged = [
+          ...new Set([...totalFilesChanged, ...iterationFilesChanged])
+        ];
+
+        this.logValidationStatus(
+          '✅',
+          `Iteration ${iterationCount} completed in ${iterationDurationSeconds}s`
+        );
+        if (iterationFilesChanged.length > 0) {
+          this.logInfo(
+            `📝 ${iterationFilesChanged.length} files were modified in this iteration`
+          );
+        }
+
+        // Check if we should continue iterating
+        const currentElapsedMs = Date.now() - totalStartTime;
+        const shouldContinue =
+          hasMinimumDuration && currentElapsedMs < minimumDurationMs;
+
+        if (shouldContinue) {
+          const remainingMinutes = Math.round(
+            (minimumDurationMs - currentElapsedMs) / TIME.MS.ONE_MINUTE
+          );
+          this.logInfo(
+            `🔄 Continuing iterations - ${remainingMinutes} minutes remaining to meet minimum duration`
+          );
+
+          // Add a small delay between iterations to allow file system to settle
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        } else {
+          taskCompleted = true;
+        }
+      } while (!taskCompleted);
+
+      const totalDuration = Date.now() - totalStartTime;
+      const totalDurationSeconds = Math.round(
+        totalDuration / TIME.MS.ONE_SECOND
+      );
+
+      this.logValidationStatus(
+        '✅',
+        `Task execution completed in ${totalDurationSeconds}s (${iterationCount} iterations)`
+      );
+      if (totalFilesChanged.length > 0) {
+        this.logInfo(
+          `📝 Total ${totalFilesChanged.length} unique files were modified`
+        );
       }
 
-      // Note: filesChanged is captured here for immediate feedback, but the actual
-      // file staging happens in git-manager.js during commit creation, which includes
-      // a double-check for any missed files
       return {
         success: true,
-        output: result.stdout,
-        error: result.stderr,
-        filesChanged,
-        duration
+        output: totalOutput,
+        error: '',
+        filesChanged: totalFilesChanged,
+        duration: totalDuration,
+        iterations: iterationCount
       };
     } catch (error) {
-      this.logger.error(`💥 Claude Code execution failed: ${error.message}`);
+      this.logError(`💥 Claude Code execution failed: ${error.message}`);
       return {
         success: false,
         error: error.message,
-        filesChanged: [],
-        duration: 0
+        filesChanged: totalFilesChanged,
+        duration: Date.now() - totalStartTime,
+        iterations: iterationCount
       };
     }
   }
@@ -903,7 +1302,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     this.logPrompt(prompt, 'Original');
 
     // Check if SuperClaude mode is active and optimize prompt
-    if (this.superclaudeConfig?.enabled && this.superclaudeIntegration?.isEnabled()) {
+    if (
+      this.superclaudeConfig?.enabled &&
+      this.superclaudeIntegration?.isEnabled()
+    ) {
       prompt = await this.optimizePromptWithSuperClaude(prompt);
     }
 
@@ -913,7 +1315,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     }
 
     const maxRetries = options.maxRetries || this.options.rateLimitRetries || 5;
-    const baseDelay = options.baseDelay || this.options.rateLimitBaseDelay || TIME.MS.RATE_LIMIT_BASE_DELAY;
+    const baseDelay =
+      options.baseDelay ||
+      this.options.rateLimitBaseDelay ||
+      TIME.MS.RATE_LIMIT_BASE_DELAY;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -922,28 +1327,51 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       } catch (error) {
         const errorType = this.classifyError(error);
 
-        if (errorType === 'RATE_LIMIT' && this.options.rateLimitRetry) {
+        if (errorType === 'RATE_LIMIT' && this.options.rateLimitRetries > 0) {
           if (attempt < maxRetries) {
-            const delay = this.calculateBackoffDelay(attempt, baseDelay, errorType);
-            this.logger.warn(`🔄 Rate limit encountered. Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
+            const delay = this.calculateBackoffDelay(
+              attempt,
+              baseDelay,
+              errorType
+            );
+            this.logWarn(
+              `🔄 Rate limit encountered. Waiting ${Math.round(
+                delay / TIME.MS.ONE_SECOND
+              )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
+            );
 
             // Keep session alive during wait
             await this.waitWithProgress(delay, errorType);
             continue;
           } else {
-            this.logger.error(`💥 Rate limit exceeded maximum retry attempts (${maxRetries})`);
+            this.logError(
+              `💥 Rate limit exceeded maximum retry attempts (${maxRetries})`
+            );
             throw new Error(`Rate limit exceeded after ${maxRetries} retries`);
           }
-        } else if (errorType === 'USAGE_LIMIT' && this.options.usageLimitRetry) {
+        } else if (
+          errorType === 'USAGE_LIMIT' &&
+          this.options.usageLimitRetry
+        ) {
           if (attempt < maxRetries) {
-            const delay = this.calculateBackoffDelay(attempt, baseDelay, errorType);
-            this.logger.warn(`🔄 Usage limit encountered. Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry (attempt ${attempt + 1}/${maxRetries})...`);
+            const delay = this.calculateBackoffDelay(
+              attempt,
+              baseDelay,
+              errorType
+            );
+            this.logWarn(
+              `🔄 Usage limit encountered. Waiting ${Math.round(
+                delay / TIME.MS.ONE_SECOND
+              )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
+            );
 
             // Keep session alive during wait
             await this.waitWithProgress(delay, errorType);
             continue;
           } else {
-            this.logger.error(`💥 Usage limit exceeded maximum retry attempts (${maxRetries})`);
+            this.logError(
+              `💥 Usage limit exceeded maximum retry attempts (${maxRetries})`
+            );
             throw new Error(`Usage limit exceeded after ${maxRetries} retries`);
           }
         } else if (errorType === 'TIMEOUT') {
@@ -956,7 +1384,11 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
           // For other errors, retry with shorter delay
           if (attempt < Math.min(maxRetries, 2)) {
             const delay = RETRY.GENERAL_ERROR_DELAY;
-            this.logger.warn(`⚠️  Execution failed, retrying in ${delay / TIME.MS.ONE_SECOND}s (attempt ${attempt + 1}/${maxRetries})...`);
+            this.logWarn(
+              `⚠️  Execution failed, retrying in ${
+                delay / TIME.MS.ONE_SECOND
+              }s (attempt ${attempt + 1}/${maxRetries})...`
+            );
             await this.sleep(delay);
             continue;
           } else {
@@ -995,7 +1427,11 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       // Set timeout
       const timeout = setTimeout(() => {
         child.kill('SIGTERM');
-        reject(new Error(`Claude Code execution timed out after ${options.timeout}ms`));
+        reject(
+          new Error(
+            `Claude Code execution timed out after ${options.timeout}ms`
+          )
+        );
       }, options.timeout || TIME.MS.FIVE_MINUTES);
 
       child.on('close', (code) => {
@@ -1005,20 +1441,10 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         if (code === 0) {
           // Display Claude Code output after completion
           if (stdout.trim()) {
-            stdout.split('\n').forEach(line => {
+            stdout.split('\n').forEach((line) => {
               if (line.trim()) {
                 // Add different colors and formatting for different types of Claude output
-                if (line.includes('Wave') || line.includes('wave')) {
-                  this.logger.info(`  \x1b[35m🤖 Claude\x1b[0m │ \x1b[35m${line}\x1b[0m`); // Magenta for waves
-                } else if (line.includes('✅') || line.includes('Success') || line.includes('Completed')) {
-                  this.logger.info(`  \x1b[32m🤖 Claude\x1b[0m │ \x1b[32m${line}\x1b[0m`); // Green for success
-                } else if (line.includes('❌') || line.includes('Error') || line.includes('Failed')) {
-                  this.logger.info(`  \x1b[31m🤖 Claude\x1b[0m │ \x1b[31m${line}\x1b[0m`); // Red for errors
-                } else if (line.includes('⚠️') || line.includes('Warning')) {
-                  this.logger.info(`  \x1b[33m🤖 Claude\x1b[0m │ \x1b[33m${line}\x1b[0m`); // Yellow for warnings
-                } else {
-                  this.logger.info(`  \x1b[36m🤖 Claude\x1b[0m │ ${line}`); // Cyan for robot icon, normal text
-                }
+                this.logClaudeOutput(line);
               }
             });
           }
@@ -1027,16 +1453,19 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         } else {
           // Display Claude Code errors
           if (stderr.trim()) {
-            stderr.split('\n').forEach(line => {
+            stderr.split('\n').forEach((line) => {
               if (line.trim()) {
-                this.logger.warn(`⚠️  Claude: ${line}`);
+                this.logClaudeError(line);
               }
             });
           }
 
           // Combine stderr and stdout for better error reporting
-          const errorOutput = stderr.trim() || stdout.trim() || 'No output captured';
-          reject(new Error(`Claude Code exited with code ${code}: ${errorOutput}`));
+          const errorOutput =
+            stderr.trim() || stdout.trim() || 'No output captured';
+          reject(
+            new Error(`Claude Code exited with code ${code}: ${errorOutput}`)
+          );
         }
       });
 
@@ -1094,13 +1523,15 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       /ENOMEM/ // Out of memory
     ];
 
-    if (usageLimitPatterns.some(pattern => pattern.test(errorMessage))) {
+    if (usageLimitPatterns.some((pattern) => pattern.test(errorMessage))) {
       return 'USAGE_LIMIT';
-    } else if (rateLimitPatterns.some(pattern => pattern.test(errorMessage))) {
+    } else if (
+      rateLimitPatterns.some((pattern) => pattern.test(errorMessage))
+    ) {
       return 'RATE_LIMIT';
-    } else if (timeoutPatterns.some(pattern => pattern.test(errorMessage))) {
+    } else if (timeoutPatterns.some((pattern) => pattern.test(errorMessage))) {
       return 'TIMEOUT';
-    } else if (fatalPatterns.some(pattern => pattern.test(errorMessage))) {
+    } else if (fatalPatterns.some((pattern) => pattern.test(errorMessage))) {
       return 'FATAL';
     } else {
       return 'TRANSIENT';
@@ -1122,7 +1553,9 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     }
 
     // Cap the maximum delay
-    const maxDelay = this.options.maxDelay || (errorType === 'USAGE_LIMIT' ? 18000000 : 900000);
+    const maxDelay =
+      this.options.maxDelay ||
+      (errorType === 'USAGE_LIMIT' ? 18000000 : 900000);
     return Math.min(delay, maxDelay);
   }
 
@@ -1131,8 +1564,11 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     const startTime = Date.now();
     const endTime = startTime + totalDelay;
 
-    const limitType = errorType === 'USAGE_LIMIT' ? 'usage limit' : 'rate limit';
-    this.logger.info(`⏸️  Session paused due to ${limitType}. Keeping session alive...`);
+    const limitType =
+      errorType === 'USAGE_LIMIT' ? 'usage limit' : 'rate limit';
+    this.logInfo(
+      `⏸️  Session paused due to ${limitType}. Keeping session alive...`
+    );
 
     while (Date.now() < endTime) {
       const remaining = endTime - Date.now();
@@ -1143,7 +1579,9 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
         break;
       }
 
-      this.logger.info(`⏳ Waiting for ${limitType} reset... ${remainingMinutes} minutes remaining`);
+      this.logInfo(
+        `⏳ Waiting for ${limitType} reset... ${remainingMinutes} minutes remaining`
+      );
 
       // Keep session checkpoint updated
       await this.createCheckpoint();
@@ -1151,18 +1589,27 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       await this.sleep(updateInterval);
     }
 
-    this.logger.info(`✅ ${limitType.charAt(0).toUpperCase() + limitType.slice(1)} wait completed. Resuming execution...`);
+    this.logValidationStatus(
+      '✅',
+      `${
+        limitType.charAt(0).toUpperCase() + limitType.slice(1)
+      } wait completed. Resuming execution...`
+    );
   }
 
   async optimizePromptWithSuperClaude (originalPrompt, retryCount = 0) {
-    this.logger.info('🧠 Optimizing prompt with SuperClaude Framework...');
+    this.logInfo('🧠 Optimizing prompt with SuperClaude Framework...');
 
     // Use the complete optimization guide with the prompt
-    let optimizationPrompt = SUPERCLAUDE_OPTIMIZATION_GUIDE.replace('{PROMPT}', originalPrompt);
+    let optimizationPrompt = SUPERCLAUDE_OPTIMIZATION_GUIDE.replace(
+      '{PROMPT}',
+      originalPrompt
+    );
 
     // Add stricter instructions on retry to ensure /sc: prefix
     if (retryCount > 0) {
-      optimizationPrompt += '\n\nIMPORTANT: The output MUST be in the format /sc:COMMAND where COMMAND ' +
+      optimizationPrompt +=
+        '\n\nIMPORTANT: The output MUST be in the format /sc:COMMAND where COMMAND ' +
         'is the SuperClaude command WITHOUT a leading slash (e.g., /sc:analyze not /sc: /analyze). ' +
         'No spaces after the colon. No other text or explanation.';
     }
@@ -1170,7 +1617,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
     try {
       // Execute Claude Code with the optimization prompt
       const retryInfo = retryCount > 0 ? ` (retry ${retryCount})` : '';
-      this.logger.info(`📝 Running prompt optimization...${retryInfo}`);
+      this.logInfo(`📝 Running prompt optimization...${retryInfo}`);
 
       // Log the optimization prompt itself
       this.logPrompt(optimizationPrompt, 'SuperClaude Optimization Request');
@@ -1187,43 +1634,134 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       if (optimizedCommand && optimizedCommand.startsWith('/')) {
         // Check if output has incorrect format with space after colon (e.g., "/sc: /document")
         if (optimizedCommand.startsWith('/sc: ')) {
-          this.logger.warn(`⚠️  Incorrect format detected (space after colon): ${optimizedCommand}`);
-          this.logger.info('🔄 Retrying to ensure correct /sc:command format...');
-          return this.optimizePromptWithSuperClaude(originalPrompt, retryCount + 1);
+          this.logWarn(
+            `⚠️  Incorrect format detected (space after colon): ${optimizedCommand}`
+          );
+          this.logInfo('🔄 Retrying to ensure correct /sc:command format...');
+          return this.optimizePromptWithSuperClaude(
+            originalPrompt,
+            retryCount + 1
+          );
         }
 
         // Check if output starts with /sc: - if not, retry with stricter instructions
         if (!optimizedCommand.startsWith('/sc:') && retryCount === 0) {
-          this.logger.warn(`⚠️  Output doesn't start with /sc: pattern: ${optimizedCommand}`);
-          this.logger.info('🔄 Retrying to ensure /sc: prefix...');
+          this.logWarn(
+            `⚠️  Output doesn't start with /sc: pattern: ${optimizedCommand}`
+          );
+          this.logInfo('🔄 Retrying to ensure /sc: prefix...');
           return this.optimizePromptWithSuperClaude(originalPrompt, 1);
         }
 
         // Accept the command if it's different from original or starts with /sc:
-        if (optimizedCommand !== originalPrompt || optimizedCommand.startsWith('/sc:')) {
-          this.logger.info(`  \x1b[32m✅ Prompt optimized\x1b[0m │ \x1b[1m${optimizedCommand}\x1b[0m`);
+        if (
+          optimizedCommand !== originalPrompt ||
+          optimizedCommand.startsWith('/sc:')
+        ) {
+          this.logPromptOptimization(optimizedCommand);
           // Log the optimized prompt
           this.logPrompt(optimizedCommand, 'SuperClaude Optimized');
           return optimizedCommand;
         }
       } else {
-        this.logger.warn('⚠️  No optimization found, using original prompt');
+        this.logWarn('⚠️  No optimization found, using original prompt');
         return originalPrompt;
       }
     } catch (error) {
-      this.logger.error(`❌ Prompt optimization failed: ${error.message}`);
-      this.logger.info('📝 Falling back to original prompt');
+      this.logError(`❌ Prompt optimization failed: ${error.message}`);
+      this.logInfo('📝 Falling back to original prompt');
       return originalPrompt;
     }
   }
 
   async sleep (ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  logPrompt (prompt, type = 'Prompt') {
+  logPrompt () {
     // Removed fuchsia box logging - now this method does nothing
     // This keeps the method calls intact but removes the visual output
+  }
+
+  async generateIterativeTaskPrompt (
+    task,
+    iterationCount,
+    _previousOutput,
+    filesChanged
+  ) {
+    // For iterative prompts, include context from previous iterations
+    if (iterationCount > 1) {
+      const projectContext = await this.gatherProjectContext(true); // Only include uncommitted changes
+      const taskContext = await this.gatherTaskContext(task);
+
+      const prompt = `# Automated Coding Task - Continuation (Iteration ${iterationCount})
+
+## Previous Work Summary
+In the previous ${
+  iterationCount - 1
+} iteration(s), you have been working on this task.
+Files modified so far: ${
+  filesChanged.length > 0 ? filesChanged.join(', ') : 'None yet'
+}
+
+## Current Project State
+${projectContext}
+
+## Original Task Requirements
+**ID:** ${task.id}
+**Type:** ${task.type}
+**Title:** ${task.title}
+**Priority:** ${task.priority}
+
+**Requirements:**
+${task.requirements}
+
+**Acceptance Criteria:**
+${
+  task.acceptance_criteria?.map((criteria) => `- ${criteria}`).join('\\n') ||
+  'None specified'
+}
+
+**Minimum Duration:** ${task.minimum_duration} minutes (iterative mode active)
+**Files to Modify:** ${task.files_to_modify?.join(', ') || 'Any relevant files'}
+
+## Task Context
+${taskContext}
+
+## Instructions for This Iteration
+You are continuing work on this task. The minimum duration requirement means you should:
+
+1. Review the uncommitted changes from previous iterations
+2. Continue implementing features from the requirements that haven't been fully addressed
+3. Improve and refine the existing implementation
+4. Add comprehensive tests for the implemented features
+5. Enhance error handling and edge case coverage
+6. Improve code documentation and comments
+7. Optimize performance where applicable
+8. Ensure all acceptance criteria are thoroughly met
+9. Consider additional enhancements that align with the task goals
+
+## Iteration Guidelines
+- Build upon the existing work, don't start from scratch
+- Focus on quality improvements and completeness
+- Add value with each iteration
+- Consider aspects like security, performance, and maintainability
+- Ensure the code is production-ready
+
+## Time Status
+- This is iteration ${iterationCount} of the task
+- Minimum duration of ${
+  task.minimum_duration
+} minutes ensures thorough implementation
+- Use this time to create high-quality, well-tested code
+
+Please continue implementing and improving this task, focusing on areas that will add the most value.`;
+
+      return prompt;
+    }
+
+    // For first iteration, use the standard prompt
+    return this.generateTaskPrompt(task);
   }
 
   async generateTaskPrompt (task) {
@@ -1232,13 +1770,13 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
       const superclaudePlan = await this.superclaudeIntegration.planTask(task);
 
       if (superclaudePlan) {
-        this.logger.info('  \x1b[35m🧠 SuperClaude Framework\x1b[0m │ Task execution mode activated');
+        this.logSuperclaude('framework', 'Task execution mode activated');
         // Continue with standard prompt generation - will be optimized by optimizePromptWithSuperClaude
       }
     }
 
     // Fallback to standard prompt generation
-    this.logger.info('  \x1b[36m🤖 Standard mode\x1b[0m │ Task execution');
+    this.logSuperclaude('standard', 'Task execution');
 
     // Load project context
     const projectContext = await this.gatherProjectContext();
@@ -1259,9 +1797,12 @@ ${projectContext}
 ${task.requirements}
 
 **Acceptance Criteria:**
-${task.acceptance_criteria?.map(criteria => `- ${criteria}`).join('\\n') || 'None specified'}
+${
+  task.acceptance_criteria?.map((criteria) => `- ${criteria}`).join('\\n') ||
+  'None specified'
+}
 
-**Estimated Duration:** ${task.estimated_duration || 60} minutes
+**Minimum Duration:** ${task.minimum_duration || 'No minimum specified'} minutes
 **Files to Modify:** ${task.files_to_modify?.join(', ') || 'Any relevant files'}
 
 ## Task Context
@@ -1276,7 +1817,11 @@ ${taskContext}
 6. Follow the project's coding standards and style guide
 
 ## Time Constraints
-- Maximum time for this task: ${task.estimated_duration || 60} minutes
+- ${
+  task.minimum_duration
+    ? `Minimum time for this task: ${task.minimum_duration} minutes`
+    : 'No minimum duration specified'
+}
 - Focus on completing the core requirements first
 - If time is limited, prioritize functionality over perfect polish
 
@@ -1292,19 +1837,67 @@ Please implement this task now.`;
     return prompt;
   }
 
-  async gatherProjectContext () {
-    const contextFiles = ['README.md', 'package.json', 'requirements.txt', 'go.mod', 'Cargo.toml'];
+  async gatherProjectContext (includeOnlyChanges = false) {
     let context = '';
 
-    for (const file of contextFiles) {
-      const filePath = path.join(this.options.workingDir, file);
-      if (await fs.pathExists(filePath)) {
-        const content = await fs.readFile(filePath, 'utf8');
-        context += `### ${file}\n\`\`\`\n${content.slice(0, 2000)}\n\`\`\`\n\n`;
+    if (includeOnlyChanges) {
+      // For iterative tasks, only include uncommitted changes
+      if (this.gitManager) {
+        try {
+          const changes = await this.gitManager.getChangedFiles();
+          if (changes.length > 0) {
+            context += '### Uncommitted Changes\n';
+            context +=
+              'The following files have been modified in this session:\n';
+            context += changes.map((file) => `- ${file}`).join('\n');
+            context += '\n\n';
+
+            // Include diff for small changes
+            try {
+              const diffResult = await this.executeCommand('git', [
+                'diff',
+                '--stat'
+              ]);
+              if (diffResult.stdout) {
+                context += '### Change Summary\n';
+                context += `\`\`\`\n${diffResult.stdout.slice(
+                  0,
+                  1000
+                )}\n\`\`\`\n\n`;
+              }
+            } catch (error) {
+              // Ignore diff errors
+            }
+          }
+        } catch (error) {
+          this.logDebug('Could not get uncommitted changes for context', {
+            error: error.message
+          });
+        }
+      }
+    } else {
+      // Standard behavior - include project files
+      const contextFiles = [
+        'README.md',
+        'package.json',
+        'requirements.txt',
+        'go.mod',
+        'Cargo.toml'
+      ];
+
+      for (const file of contextFiles) {
+        const filePath = path.join(this.options.workingDir, file);
+        if (await fs.pathExists(filePath)) {
+          const content = await fs.readFile(filePath, 'utf8');
+          context += `### ${file}\n\`\`\`\n${content.slice(
+            0,
+            2000
+          )}\n\`\`\`\n\n`;
+        }
       }
     }
 
-    return context || 'No project context files found.';
+    return context || 'No project context found.';
   }
 
   async gatherTaskContext (task) {
@@ -1313,12 +1906,12 @@ Please implement this task now.`;
     // Add dependency information
     if (task.dependencies?.length > 0) {
       const dependencyTasks = this.state.completedTasks
-        .filter(ct => task.dependencies.includes(ct.task.id))
-        .map(ct => ct.task);
+        .filter((ct) => task.dependencies.includes(ct.task.id))
+        .map((ct) => ct.task);
 
       if (dependencyTasks.length > 0) {
         context += '### Completed Dependencies\n';
-        dependencyTasks.forEach(dep => {
+        dependencyTasks.forEach((dep) => {
           context += `- ${dep.id}: ${dep.title}\n`;
         });
         context += '\n';
@@ -1349,7 +1942,7 @@ Please implement this task now.`;
   }
 
   async validateTaskCompletion (task, result) {
-    this.logger.info('🔍 Validating task completion...');
+    this.logInfo('🔍 Validating task completion...');
 
     const validation = {
       passed: true,
@@ -1360,43 +1953,57 @@ Please implement this task now.`;
     try {
       // Run project tests if specified
       if (task.custom_validation?.script) {
-        this.logger.info('🧪 Running custom validation script...');
-        const scriptResult = await this.executeCommand('node', [task.custom_validation.script], {
-          timeout: task.custom_validation.timeout * TIME.MS.ONE_SECOND || TIME.MS.FIVE_MINUTES
-        });
+        this.logInfo('🧪 Running custom validation script...');
+        const scriptResult = await this.executeCommand(
+          'node',
+          [task.custom_validation.script],
+          {
+            timeout:
+              task.custom_validation.timeout * TIME.MS.ONE_SECOND ||
+              TIME.MS.FIVE_MINUTES
+          }
+        );
 
         if (scriptResult.code !== 0) {
           validation.passed = false;
-          validation.errors.push(`Custom validation script failed: ${scriptResult.stderr}`);
+          validation.errors.push(
+            `Custom validation script failed: ${scriptResult.stderr}`
+          );
         } else {
-          this.logger.info('✅ Custom validation passed');
+          this.logValidationStatus('✅', 'Custom validation passed');
         }
       }
 
       // Check if files were actually modified
       if (result.filesChanged.length === 0 && task.type !== 'docs') {
-        validation.warnings.push('No files were modified during task execution');
-        this.logger.warn('⚠️  No files were modified during execution');
+        validation.warnings.push(
+          'No files were modified during task execution'
+        );
+        this.logWarn('⚠️  No files were modified during execution');
       }
 
       // Run general project validation
-      this.logger.info('🔍 Running project validation...');
+      this.logInfo('🔍 Running project validation...');
       const projectValidation = await this.validator.validateProject();
       if (!projectValidation.valid) {
         validation.passed = false;
-        validation.errors.push(...projectValidation.errors.map(e => e.message));
-        this.logger.error('❌ Project validation failed');
+        validation.errors.push(
+          ...projectValidation.errors.map((e) => e.message)
+        );
+        this.logError('❌ Project validation failed');
       } else {
-        this.logger.info('✅ Project validation passed');
+        this.logValidationStatus('✅', 'Project validation passed');
       }
     } catch (error) {
       validation.passed = false;
       validation.errors.push(`Validation error: ${error.message}`);
-      this.logger.error(`❌ Validation error: ${error.message}`);
+      this.logError(`❌ Validation error: ${error.message}`);
     }
 
     const status = validation.passed ? '✅' : '❌';
-    this.logger.info(`${status} Task validation completed (${validation.errors.length} errors, ${validation.warnings.length} warnings)`);
+    this.logInfo(
+      `${status} Task validation completed (${validation.errors.length} errors, ${validation.warnings.length} warnings)`
+    );
 
     return validation;
   }
@@ -1419,14 +2026,17 @@ Please implement this task now.`;
 
         // Log warnings for high resource usage
         if (usage.cpu > 90) {
-          this.logger.warn('High CPU usage detected', { cpu: usage.cpu });
+          this.logWarn('High CPU usage detected', { cpu: usage.cpu });
         }
 
-        if (usage.memory > 2000000000) { // 2GB
-          this.logger.warn('High memory usage detected', { memoryMB: Math.round(usage.memory / 1000000) });
+        if (usage.memory > 2000000000) {
+          // 2GB
+          this.logWarn('High memory usage detected', {
+            memoryMB: Math.round(usage.memory / 1000000)
+          });
         }
       } catch (error) {
-        this.logger.debug('Resource monitoring error', { error: error.message });
+        this.logDebug('Resource monitoring error', { error: error.message });
       }
     }, 30000); // Every 30 seconds
   }
@@ -1442,25 +2052,35 @@ Please implement this task now.`;
       timestamp: Date.now(),
       sessionId: this.state.sessionId,
       currentTask: this.state.currentTask?.id || null,
-      completedTasks: this.state.completedTasks.map(ct => ct.task.id),
-      failedTasks: this.state.failedTasks.map(ft => ft.task.id),
+      completedTasks: this.state.completedTasks.map((ct) => ct.task.id),
+      failedTasks: this.state.failedTasks.map((ft) => ft.task.id),
       elapsed: Date.now() - this.state.startTime,
       resourceUsage: this.state.resourceUsage.slice(-1)[0] || null
     };
 
-    const checkpointDir = path.join(this.options.workingDir, '.nightly-code', 'checkpoints');
+    const checkpointDir = path.join(
+      this.options.workingDir,
+      '.nightly-code',
+      'checkpoints'
+    );
     await fs.ensureDir(checkpointDir);
 
-    const checkpointFile = path.join(checkpointDir, `${this.state.sessionId}-${Date.now()}.json`);
+    const checkpointFile = path.join(
+      checkpointDir,
+      `${this.state.sessionId}-${Date.now()}.json`
+    );
     await fs.writeJson(checkpointFile, checkpoint, { spaces: 2 });
 
     this.state.checkpoints.push(checkpoint);
 
-    this.logger.debug('Checkpoint created', { checkpointFile, elapsed: checkpoint.elapsed });
+    this.logDebug('Checkpoint created', {
+      checkpointFile,
+      elapsed: checkpoint.elapsed
+    });
   }
 
   async resumeFromCheckpoint (checkpointPath) {
-    this.logger.info('Resuming from checkpoint', { checkpointPath });
+    this.logInfo('Resuming from checkpoint', { checkpointPath });
 
     const checkpoint = await fs.readJson(checkpointPath);
 
@@ -1471,10 +2091,10 @@ Please implement this task now.`;
     // Mark completed tasks
     for (const taskId of checkpoint.completedTasks) {
       // This would need more complex state restoration
-      this.logger.info('Task already completed in checkpoint', { taskId });
+      this.logInfo('Task already completed in checkpoint', { taskId });
     }
 
-    this.logger.info('Checkpoint restored successfully');
+    this.logInfo('Checkpoint restored successfully');
   }
 
   async executeCommand (command, args = [], options = {}) {
@@ -1514,13 +2134,16 @@ Please implement this task now.`;
 
   async getAvailableDiskSpace () {
     try {
-      const result = await this.executeCommand('df', ['-B1', this.options.workingDir]);
+      const result = await this.executeCommand('df', [
+        '-B1',
+        this.options.workingDir
+      ]);
       const lines = result.stdout.trim().split('\\n');
       const spaceLine = lines[1] || lines[0];
       const available = parseInt(spaceLine.split(/\\s+/)[3] || '0');
       return available;
     } catch (error) {
-      this.logger.warn('Could not check disk space', { error: error.message });
+      this.logWarn('Could not check disk space', { error: error.message });
       return Number.MAX_SAFE_INTEGER; // Assume unlimited if check fails
     }
   }
@@ -1533,7 +2156,7 @@ Please implement this task now.`;
       /Authentication failed/
     ];
 
-    return criticalPatterns.some(pattern => pattern.test(error.message));
+    return criticalPatterns.some((pattern) => pattern.test(error.message));
   }
 
   async finalize (results) {
@@ -1541,9 +2164,9 @@ Please implement this task now.`;
     const duration = this.state.endTime - this.state.startTime;
     const durationMinutes = Math.round(duration / TIME.MS.ONE_MINUTE);
 
-    this.logger.info('');
-    this.logger.info('🏁 Finalizing Session');
-    this.logger.info('═══════════════════');
+    this.logInfo('');
+    this.logInfo('🏁 Finalizing Session');
+    this.logInfo('═══════════════════');
 
     // Stop monitoring
     if (this.resourceMonitoringInterval) {
@@ -1563,18 +2186,18 @@ Please implement this task now.`;
     if (results.completed > 0 && !this.options.dryRun) {
       if (this.gitManager.options.prStrategy === 'session') {
         // Legacy behavior: create single session PR
-        this.logger.info('🔄 Creating session pull request...');
+        this.logInfo('🔄 Creating session pull request...');
         const sessionData = {
           sessionId: this.state.sessionId,
           completedTasks: results.completed,
           totalTasks: results.completed + results.failed,
           duration: this.state.endTime - this.state.startTime,
-          tasks: this.state.completedTasks.map(ct => ({
+          tasks: this.state.completedTasks.map((ct) => ({
             ...ct.task,
             status: 'completed',
             result: ct.result
           })),
-          failedTasks: this.state.failedTasks.map(ft => ({
+          failedTasks: this.state.failedTasks.map((ft) => ({
             ...ft.task,
             status: 'failed',
             error: ft.error
@@ -1583,29 +2206,29 @@ Please implement this task now.`;
 
         const prUrl = await this.gitManager.createSessionPR(sessionData);
         if (prUrl) {
-          this.logger.info(`✅ Session PR created: ${prUrl}`);
+          this.logValidationStatus('✅', `Session PR created: ${prUrl}`);
         }
       } else {
         // Task-based PRs are created immediately after each task
-        this.logger.info('✅ Individual task PRs have been created');
+        this.logValidationStatus('✅', 'Individual task PRs have been created');
         const taskPRs = this.state.completedTasks
-          .filter(ct => ct.prUrl)
-          .map(ct => `  - ${ct.task.title}: ${ct.prUrl}`);
+          .filter((ct) => ct.prUrl)
+          .map((ct) => `  - ${ct.task.title}: ${ct.prUrl}`);
         if (taskPRs.length > 0) {
-          this.logger.info('📋 Task PRs:');
-          taskPRs.forEach(pr => this.logger.info(pr));
+          this.logInfo('📋 Task PRs:');
+          taskPRs.forEach((pr) => this.logInfo(pr));
         }
       }
     } else if (results.completed > 0 && this.options.dryRun) {
-      this.logger.info('🔄 Dry run mode - skipping pull request creation');
+      this.logInfo('🔄 Dry run mode - skipping pull request creation');
     }
 
     // Clean up any remaining task branches (failed tasks) (skip in dry-run mode)
     if (!this.options.dryRun) {
-      this.logger.info('🧹 Cleaning up remaining branches...');
+      this.logInfo('🧹 Cleaning up remaining branches...');
       await this.gitManager.cleanupSessionBranches();
     } else {
-      this.logger.info('🔄 Dry run mode - skipping branch cleanup');
+      this.logInfo('🔄 Dry run mode - skipping branch cleanup');
     }
 
     // Create session summary commit on main (for record keeping) (skip in dry-run mode)
@@ -1616,19 +2239,21 @@ Please implement this task now.`;
         totalTasks: results.completed + results.failed,
         duration: this.state.endTime - this.state.startTime
       });
-    } else if ((results.completed > 0 || results.failed > 0) && this.options.dryRun) {
-      this.logger.info('🔄 Dry run mode - skipping session summary commit');
+    } else if (
+      (results.completed > 0 || results.failed > 0) &&
+      this.options.dryRun
+    ) {
+      this.logInfo('🔄 Dry run mode - skipping session summary commit');
     }
 
     // Create final checkpoint
     await this.createCheckpoint();
 
     // Generate and save report
-    const report = await this.reporter.generateSessionReport(this.state, results);
+    await this.reporter.generateSessionReport(this.state, results);
 
     // Display final summary with pretty UI
-    console.log();
-    this.prettyLogger.divider('═', 60, 'cyan');
+    this.displayFinalSummary();
 
     // Session results table
     const resultTableData = [
@@ -1636,31 +2261,56 @@ Please implement this task now.`;
       ['Status', 'Metric', 'Value', 'Result']
     ];
 
-    const successRate = results.completed + results.failed > 0
-      ? Math.round((results.completed / (results.completed + results.failed)) * 100)
-      : 0;
+    const successRate =
+      results.completed + results.failed > 0
+        ? Math.round(
+          (results.completed / (results.completed + results.failed)) * 100
+        )
+        : 0;
 
     // Strip emoji variant selectors for proper table alignment
     const stripVariants = (str) => str.replace(/\uFE0F/g, '');
 
     resultTableData.push(
-      [require('chalk').green(stripVariants('✅')), 'Completed Tasks', `${results.completed}`, require('chalk').green('Success')],
-      [require('chalk').red(stripVariants('❌')), 'Failed Tasks', `${results.failed}`, results.failed > 0 ? require('chalk').red('Failed') : '-'],
-      [require('chalk').blue(stripVariants('📊')), 'Success Rate', `${successRate}%`, successRate >= 80 ? require('chalk').green('Good') : require('chalk').yellow('Needs Improvement')],
-      [require('chalk').yellow(stripVariants('⏱️')), 'Duration', `${durationMinutes}m`, require('chalk').cyan(`${Math.round(durationMinutes / 60 * 10) / 10}h`)]
+      [
+        require('chalk').green(stripVariants('✅')),
+        'Completed Tasks',
+        `${results.completed}`,
+        require('chalk').green('Success')
+      ],
+      [
+        require('chalk').red(stripVariants('❌')),
+        'Failed Tasks',
+        `${results.failed}`,
+        results.failed > 0 ? require('chalk').red('Failed') : '-'
+      ],
+      [
+        require('chalk').blue(stripVariants('📊')),
+        'Success Rate',
+        `${successRate}%`,
+        successRate >= 80
+          ? require('chalk').green('Good')
+          : require('chalk').yellow('Needs Improvement')
+      ],
+      [
+        require('chalk').yellow(stripVariants('⏱️')),
+        'Duration',
+        `${durationMinutes}m`,
+        require('chalk').cyan(
+          `${Math.round((durationMinutes / 60) * 10) / 10}h`
+        )
+      ]
     );
 
-    this.prettyLogger.table(resultTableData, {
+    this.displayTable(resultTableData, {
       columnWidths: [8, 20, 15, 20],
       align: ['center', 'left', 'center', 'center'],
       config: {
-        spanningCells: [
-          { col: 0, row: 0, colSpan: 4, alignment: 'center' }
-        ]
+        spanningCells: [{ col: 0, row: 0, colSpan: 4, alignment: 'center' }]
       }
     });
 
-    console.log();
+    this.newLine();
 
     // Summary box
     const summaryLines = [
@@ -1672,36 +2322,49 @@ Please implement this task now.`;
     ];
 
     if (results.completed > 0 && !this.options.dryRun) {
-      summaryLines.push('🎉 All successful tasks have been merged to main branch!');
+      summaryLines.push(
+        '🎉 All successful tasks have been merged to main branch!'
+      );
     } else if (results.completed > 0 && this.options.dryRun) {
-      summaryLines.push(require('chalk').yellow('🔄 Dry run mode - tasks would have been merged to main branch'));
+      summaryLines.push(
+        require('chalk').yellow(
+          '🔄 Dry run mode - tasks would have been merged to main branch'
+        )
+      );
     }
 
     if (this.state.failedTasks.length > 0) {
       summaryLines.push('', require('chalk').red('Failed tasks:'));
-      this.state.failedTasks.forEach(ft => {
-        summaryLines.push(require('chalk').red(`  • ${ft.task.title}: ${ft.error.message}`));
+      this.state.failedTasks.forEach((ft) => {
+        summaryLines.push(
+          require('chalk').red(`  • ${ft.task.title}: ${ft.error.message}`)
+        );
       });
     }
 
-    this.prettyLogger.box(summaryLines.join('\n'), {
+    this.displayBox(summaryLines.join('\n'), {
       borderStyle: 'round',
       borderColor: results.failed === 0 ? 'green' : 'yellow',
       padding: 2,
       align: 'left'
     });
 
-    console.log();
+    this.newLine();
   }
 
   async handleFailure (error) {
-    this.logger.error('Handling session failure', { error: error.message, stack: error.stack });
+    this.logError('Handling session failure', {
+      error: error.message,
+      stack: error.stack
+    });
 
     // Try to save current state
     try {
       await this.createCheckpoint();
     } catch (checkpointError) {
-      this.logger.error('Failed to create failure checkpoint', { error: checkpointError.message });
+      this.logError('Failed to create failure checkpoint', {
+        error: checkpointError.message
+      });
     }
 
     // Cleanup resources
@@ -1716,8 +2379,9 @@ Please implement this task now.`;
       sessionId: this.state.sessionId,
       duration,
       completedTasks: this.state.completedTasks.length,
-      totalTasks: this.state.completedTasks.length + this.state.failedTasks.length,
-      errors: this.state.failedTasks.map(ft => ft.error),
+      totalTasks:
+        this.state.completedTasks.length + this.state.failedTasks.length,
+      errors: this.state.failedTasks.map((ft) => ft.error),
       resourceUsage: this.state.resourceUsage,
       checkpoints: this.state.checkpoints.length
     };

@@ -93,7 +93,7 @@ class TaskDescriptor {
       title,
       requirements,
       acceptance_criteria: acceptanceCriteria,
-      estimated_duration: estimatedDuration,
+      minimum_duration: estimatedDuration,
       dependencies: [],
       tags,
       files_to_modify: filesToModify,
@@ -563,7 +563,7 @@ class TaskDescriptor {
       tasks: allTasks,
       metadata: {
         total_tasks: allTasks.length,
-        estimated_total_duration: allTasks.reduce((sum, task) => sum + task.estimated_duration, 0),
+        estimated_total_duration: allTasks.reduce((sum, task) => sum + (task.minimum_duration || 0), 0),
         auto_split_applied: allTasks.some(task => task.title.includes(' - ') || task.dependencies.length > 0)
       }
     };
@@ -590,7 +590,7 @@ class TaskDescriptor {
       acceptance_criteria: Array.isArray(task.acceptance_criteria)
         ? task.acceptance_criteria
         : [task.acceptance_criteria || 'Task completed successfully'].flat(),
-      estimated_duration: task.estimated_duration || 60,
+      minimum_duration: task.minimum_duration || 0,
       dependencies: task.dependencies || [],
       tags: task.tags || [],
       files_to_modify: task.files_to_modify || [],
@@ -598,7 +598,7 @@ class TaskDescriptor {
     };
 
     // Add custom validation if complex task
-    if (optimized.priority >= 8 || optimized.estimated_duration > 180) {
+    if (optimized.priority >= 8 || (optimized.minimum_duration && optimized.minimum_duration > 180)) {
       optimized.custom_validation = {
         script: './scripts/validate-task.js',
         timeout: 300

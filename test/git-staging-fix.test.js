@@ -2,7 +2,7 @@
 jest.mock('simple-git');
 jest.mock('fs-extra');
 
-const { GitManager } = require('../src/git-manager');
+const { GitManager } = require('../src/integrations/git-manager');
 const simpleGit = require('simple-git');
 
 describe('Git Staging Fix Tests', () => {

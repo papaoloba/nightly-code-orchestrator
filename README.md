@@ -174,7 +174,7 @@ tasks:
       - "Password reset flow works end-to-end"
       - "All security tests pass"
     
-    estimated_duration: 180  # 3 hours
+    minimum_duration: 180  # Optional: Forces iterative prompting for at least 3 hours
     dependencies: []
     tags: ["backend", "security", "authentication"]
     files_to_modify:
@@ -203,7 +203,7 @@ tasks:
       - "Unit tests verify proper cleanup"
       - "Application can run 24+ hours without issues"
     
-    estimated_duration: 90
+    minimum_duration: 90  # Optional: Forces iterative prompting for at least 90 minutes
     dependencies: []
     tags: ["bugfix", "performance", "memory"]
     files_to_modify:
@@ -584,7 +584,7 @@ For implementing new functionality:
     - "Failed payments show appropriate errors"
     - "Webhook events are processed correctly"
   
-  estimated_duration: 240
+  minimum_duration: 240
   tags: ["backend", "payments", "integration"]
 ```
 
@@ -611,7 +611,7 @@ For resolving issues:
     - "Database queries are optimized"
     - "Caching reduces repeat query time"
   
-  estimated_duration: 120
+  minimum_duration: 120
   tags: ["bugfix", "performance", "database"]
 ```
 
@@ -640,7 +640,7 @@ For improving code structure:
     - "Service classes have 90%+ test coverage"
     - "All existing functionality still works"
   
-  estimated_duration: 180
+  minimum_duration: 180
   tags: ["refactor", "architecture"]
 ```
 
@@ -858,6 +858,69 @@ tasks:
     dependencies: ["task-b"]  # task-a depends on task-b
   - id: "task-b" 
     dependencies: ["task-a"]  # task-b depends on task-a (circular!)
+```
+
+### Dependency-Aware Branching
+
+Nightly Code now supports intelligent Git branching that respects task dependencies. When a task depends on another task, it will automatically branch from the dependency's branch instead of main, ensuring all dependent code is available.
+
+#### How It Works
+
+1. **Independent Tasks**: Branch from main as usual
+2. **Dependent Tasks**: Branch from the last dependency's branch
+3. **Missing Dependencies**: Fall back to main with a warning
+
+Example workflow:
+```
+main
+ └─ task/setup-db (Task A)
+     └─ task/create-api (Task B depends on A)
+         └─ task/add-tests (Task C depends on B)
+```
+
+#### Configuration
+
+Control dependency branching behavior in `nightly-code.yaml`:
+
+```yaml
+git:
+  # Enable branching from dependency branches (default: true)
+  dependency_aware_branching: true
+  
+  # Auto-merge tasks that have dependents (default: false)
+  merge_dependency_chains: false
+  
+  # Fail if dependency branches are missing (default: false)
+  strict_dependency_checking: false
+```
+
+#### Task Dependencies Example
+
+```yaml
+tasks:
+  - id: "setup-database"
+    type: "feature"
+    title: "Set up database schema"
+    requirements: "Create initial database tables and migrations"
+    dependencies: []  # No dependencies - branches from main
+
+  - id: "create-api"
+    type: "feature"
+    title: "Create REST API"
+    requirements: "Implement CRUD endpoints for database entities"
+    dependencies: ["setup-database"]  # Branches from setup-database branch
+
+  - id: "add-authentication"
+    type: "feature"
+    title: "Add authentication"
+    requirements: "Implement JWT authentication for API"
+    dependencies: ["create-api"]  # Branches from create-api branch
+
+  - id: "add-tests"
+    type: "test"
+    title: "Add integration tests"
+    requirements: "Test API endpoints with authentication"
+    dependencies: ["create-api", "add-authentication"]  # Branches from add-authentication (last dependency)
 ```
 
 ### Debug Mode

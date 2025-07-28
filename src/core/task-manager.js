@@ -2,9 +2,9 @@ const fs = require('fs-extra');
 const path = require('path');
 const YAML = require('yaml');
 const Joi = require('joi');
-const { TIME } = require('./constants');
-const { createErrorHandler } = require('./error-handler');
-const { ValidationError: CustomValidationError, FileSystemError } = require('./errors');
+const { TIME } = require('../utils/constants');
+const { createErrorHandler } = require('../errors/error-handler');
+const { ValidationError: CustomValidationError, FileSystemError } = require('../errors/errors');
 
 /**
  * TaskManager handles loading, validation, and management of tasks for nightly-claude-code
@@ -48,6 +48,23 @@ class TaskManager {
    * @private
    * @returns {Object} Joi schema object for task validation
    */
+  // File-scoped logging methods
+  logInfo (message, data = {}) {
+    this.options.logger.info(message, data);
+  }
+
+  logError (message, data = {}) {
+    this.options.logger.error(message, data);
+  }
+
+  logWarn (message, data = {}) {
+    this.options.logger.warn(message, data);
+  }
+
+  logDebug (message, data = {}) {
+    this.options.logger.debug(message, data);
+  }
+
   createTaskSchema () {
     return Joi.object({
       id: Joi.string().required().pattern(/^[a-zA-Z0-9-_]+$/),
@@ -56,7 +73,7 @@ class TaskManager {
       title: Joi.string().required().max(200),
       requirements: Joi.string().required(),
       acceptance_criteria: Joi.array().items(Joi.string()).default([]),
-      estimated_duration: Joi.number().integer().min(1).max(480).default(60), // minutes
+      minimum_duration: Joi.number().integer().min(1).max(480).optional(), // minutes
       dependencies: Joi.array().items(Joi.string()).default([]),
       tags: Joi.array().items(Joi.string()).default([]),
       files_to_modify: Joi.array().items(Joi.string()).default([]),
@@ -90,7 +107,7 @@ class TaskManager {
   async loadTasks () {
     const tasksFilePath = path.resolve(this.options.workingDir, this.options.tasksPath);
 
-    this.options.logger.info('Loading tasks from file', { tasksFilePath });
+    this.logInfo('Loading tasks from file', { tasksFilePath });
 
     return this.errorHandler.executeWithRetry(
       async () => {
@@ -165,7 +182,7 @@ class TaskManager {
 
     this.tasks = validatedTasks;
 
-    this.options.logger.info('Tasks loaded successfully', {
+    this.logInfo('Tasks loaded successfully', {
       totalTasks: this.tasks.length,
       enabledTasks: this.tasks.filter(t => t.enabled).length
     });
@@ -247,11 +264,11 @@ class TaskManager {
       }
     }
 
-    // Estimate duration validation
-    if (task.estimated_duration > 240) { // More than 4 hours
-      this.options.logger.warn('Task has very long estimated duration', {
+    // Minimum duration validation
+    if (task.minimum_duration && task.minimum_duration > 240) { // More than 4 hours
+      this.logWarn('Task has very long minimum duration', {
         taskId: task.id,
-        duration: task.estimated_duration
+        duration: task.minimum_duration
       });
     }
   }
@@ -276,7 +293,7 @@ class TaskManager {
   async resolveDependencies (tasks = null) {
     const tasksToOrder = tasks || this.tasks;
 
-    this.options.logger.info('Resolving task dependencies', { totalTasks: tasksToOrder.length });
+    this.logInfo('Resolving task dependencies', { totalTasks: tasksToOrder.length });
 
     // Build dependency graph
     const dependencyGraph = new Map();
@@ -293,16 +310,34 @@ class TaskManager {
     }
 
     // Validate dependencies exist
+    const invalidDependencies = [];
     for (const task of tasksToOrder) {
+      const validDependencies = [];
+      
       for (const depId of task.dependencies || []) {
         if (!taskMap.has(depId)) {
-          throw new Error(`Task ${task.id} depends on non-existent task: ${depId}`);
+          // Log warning about invalid dependency
+          this.logWarn(`Task ${task.id} depends on non-existent task: ${depId}`);
+          invalidDependencies.push({ taskId: task.id, missingDep: depId });
+        } else {
+          // Keep valid dependencies
+          validDependencies.push(depId);
+          
+          // Add to dependents list
+          const depNode = dependencyGraph.get(depId);
+          depNode.dependents.push(task.id);
         }
-
-        // Add to dependents list
-        const depNode = dependencyGraph.get(depId);
-        depNode.dependents.push(task.id);
       }
+      
+      // Update task with only valid dependencies
+      task.dependencies = validDependencies;
+      dependencyGraph.get(task.id).dependencies = validDependencies;
+    }
+    
+    // If there were invalid dependencies, log a summary
+    if (invalidDependencies.length > 0) {
+      this.logWarn(`Found ${invalidDependencies.length} invalid dependencies. They have been removed.`);
+      this.logDebug('Invalid dependencies:', invalidDependencies);
     }
 
     // Check for circular dependencies
@@ -314,7 +349,7 @@ class TaskManager {
     // Apply priority-based ordering within dependency levels
     const orderedTasks = this.applyPriorityOrdering(sorted, taskMap);
 
-    this.options.logger.info('Dependencies resolved successfully', {
+    this.logInfo('Dependencies resolved successfully', {
       originalOrder: tasksToOrder.map(t => t.id),
       resolvedOrder: orderedTasks.map(t => t.id)
     });
@@ -392,7 +427,7 @@ class TaskManager {
     return result;
   }
 
-  applyPriorityOrdering (tasks, taskMap) {
+  applyPriorityOrdering (tasks, _taskMap) {
     // Group tasks by dependency level
     const levels = [];
     const processed = new Set();
@@ -441,8 +476,8 @@ class TaskManager {
           return bPriority - aPriority;
         }
 
-        // Finally by estimated duration (shorter tasks first)
-        return (a.estimated_duration || 60) - (b.estimated_duration || 60);
+        // Finally by minimum duration (tasks without minimum duration first)
+        return (a.minimum_duration || 0) - (b.minimum_duration || 0);
       });
 
       levels.push(currentLevel);
@@ -465,7 +500,7 @@ class TaskManager {
     };
 
     for (const task of tasksToEstimate) {
-      const duration = task.estimated_duration || 60;
+      const duration = task.minimum_duration || 60;
       totalEstimation += duration;
 
       if (Object.prototype.hasOwnProperty.call(breakdown, task.type)) {
@@ -477,7 +512,7 @@ class TaskManager {
     const overhead = Math.ceil(tasksToEstimate.length * 5); // 5 minutes per task
     totalEstimation += overhead;
 
-    this.options.logger.info('Session duration estimated', {
+    this.logInfo('Session duration estimated', {
       totalMinutes: totalEstimation,
       totalHours: Math.round(totalEstimation / 60 * 100) / 100,
       breakdown,
@@ -524,7 +559,7 @@ class TaskManager {
     // Filter by estimated duration
     if (criteria.maxDuration !== undefined) {
       filteredTasks = filteredTasks.filter(task =>
-        (task.estimated_duration || 60) <= criteria.maxDuration
+        (task.minimum_duration || 60) <= criteria.maxDuration
       );
     }
 
@@ -537,7 +572,7 @@ class TaskManager {
       );
     }
 
-    this.options.logger.info('Tasks filtered', {
+    this.logInfo('Tasks filtered', {
       originalCount: this.tasks.length,
       filteredCount: filteredTasks.length,
       criteria
@@ -566,7 +601,7 @@ Include:
           'Documentation is updated',
           'Code follows project conventions'
         ],
-        estimated_duration: 120,
+        minimum_duration: 120,
         dependencies: [],
         tags: ['frontend', 'backend'],
         files_to_modify: ['src/'],
@@ -591,7 +626,7 @@ Include:
           'Tests are added to prevent regression',
           'Documentation is updated if needed'
         ],
-        estimated_duration: 60,
+        minimum_duration: 60,
         dependencies: [],
         tags: ['bugfix'],
         files_to_modify: [],
@@ -616,7 +651,7 @@ Include:
           'No functionality changes',
           'Performance is maintained or improved'
         ],
-        estimated_duration: 90,
+        minimum_duration: 90,
         dependencies: [],
         tags: ['refactor', 'cleanup'],
         files_to_modify: [],
@@ -641,7 +676,7 @@ Include:
           'All tests pass consistently',
           'Test documentation is clear'
         ],
-        estimated_duration: 75,
+        minimum_duration: 75,
         dependencies: [],
         tags: ['testing'],
         files_to_modify: ['test/', 'spec/'],
@@ -666,7 +701,7 @@ Include:
           'Formatting is consistent with project standards',
           'Links and references are valid'
         ],
-        estimated_duration: 45,
+        minimum_duration: 45,
         dependencies: [],
         tags: ['documentation'],
         files_to_modify: ['README.md', 'docs/'],
@@ -696,12 +731,12 @@ Include:
         await fs.writeFile(outputPath, yamlContent, 'utf8');
       }
 
-      this.options.logger.info('Tasks saved successfully', {
+      this.logInfo('Tasks saved successfully', {
         filePath: outputPath,
         taskCount: tasksToSave.length
       });
     } catch (error) {
-      this.options.logger.error('Failed to save tasks', { error: error.message });
+      this.logError('Failed to save tasks', { error: error.message });
       throw new Error(`Failed to save tasks to ${outputPath}: ${error.message}`);
     }
   }
@@ -728,8 +763,8 @@ Include:
       enabled: this.tasks.filter(t => t.enabled).length,
       byType: {},
       byPriority: {},
-      totalEstimatedTime: 0,
-      averageEstimatedTime: 0
+      totalMinimumTime: 0,
+      averageMinimumTime: 0
     };
 
     // Count by type and priority
@@ -741,11 +776,11 @@ Include:
       summary.byPriority[task.priority] = (summary.byPriority[task.priority] || 0) + 1;
 
       // Time estimation
-      summary.totalEstimatedTime += task.estimated_duration || 60;
+      summary.totalMinimumTime += task.minimum_duration || 0;
     }
 
-    summary.averageEstimatedTime = summary.total > 0
-      ? Math.round(summary.totalEstimatedTime / summary.total)
+    summary.averageMinimumTime = summary.total > 0
+      ? Math.round(summary.totalMinimumTime / summary.total)
       : 0;
 
     return summary;

@@ -3,7 +3,7 @@
  * Provides consistent error handling, logging, and recovery mechanisms
  */
 
-const { TIME, RETRY } = require('./constants');
+const { TIME, RETRY } = require('../utils/constants');
 const { ErrorClassifier } = require('./errors');
 
 /**
@@ -165,6 +165,27 @@ class ErrorHandler {
     }
   }
 
+  // File-scoped logging convenience methods
+  log (level, message) {
+    if (this.logger && typeof this.logger[level] === 'function') {
+      this.logger[level](`[${this.options.contextName}] ${message}`);
+    } else {
+      console[level](`[${this.options.contextName}] ${message}`);
+    }
+  }
+
+  logInfo (message) {
+    this.log('info', message);
+  }
+
+  logWarn (message) {
+    this.log('warn', message);
+  }
+
+  logDebug (message) {
+    this.log('debug', message);
+  }
+
   /**
    * Format error for consistent logging
    * @param {Error} error - Error to format
@@ -247,82 +268,58 @@ class ErrorHandler {
 
   // Logging methods for different scenarios
   logAttempt (operationName, attempt, maxRetries) {
-    if (attempt > 0 && this.logger && typeof this.logger.info === 'function') {
-      this.logger.info(`[${this.options.contextName}] Retrying ${operationName} (attempt ${attempt + 1}/${maxRetries + 1})`);
+    if (attempt > 0) {
+      this.logInfo(`Retrying ${operationName} (attempt ${attempt + 1}/${maxRetries + 1})`);
     }
   }
 
   logRetrySuccess (operationName, attempts, duration) {
-    if (this.logger && typeof this.logger.info === 'function') {
-      this.logger.info(`[${this.options.contextName}] ${operationName} succeeded after ${attempts} retries (${Math.round(duration / TIME.MS.ONE_SECOND)}s)`);
-    }
+    this.logInfo(`${operationName} succeeded after ${attempts} retries (${Math.round(duration / TIME.MS.ONE_SECOND)}s)`);
   }
 
   logFatalError (error, operationName) {
-    if (this.logger && typeof this.logger.error === 'function') {
-      this.logger.error(`[${this.options.contextName}] 💥 Fatal error in ${operationName}: ${error.message}`);
-    }
+    this.log('error', `💥 Fatal error in ${operationName}: ${error.message}`);
   }
 
   logMaxRetriesExhausted (operationName, totalAttempts) {
-    if (this.logger && typeof this.logger.error === 'function') {
-      this.logger.error(`[${this.options.contextName}] ❌ ${operationName} failed after ${totalAttempts} attempts`);
-    }
+    this.log('error', `❌ ${operationName} failed after ${totalAttempts} attempts`);
   }
 
   logNonRetryableError (error, operationName) {
-    if (this.logger && typeof this.logger.warn === 'function') {
-      this.logger.warn(`[${this.options.contextName}] ⚠️  ${operationName} failed with non-retryable error: ${error.message}`);
-    }
+    this.logWarn(`⚠️  ${operationName} failed with non-retryable error: ${error.message}`);
   }
 
   logRetryDelay (operationName, delay, attempt, maxAttempts) {
-    if (this.logger && typeof this.logger.info === 'function') {
-      const delaySeconds = Math.round(delay / TIME.MS.ONE_SECOND);
-      this.logger.info(`[${this.options.contextName}] 🔄 Waiting ${delaySeconds}s before retry (${attempt}/${maxAttempts})`);
-    }
+    const delaySeconds = Math.round(delay / TIME.MS.ONE_SECOND);
+    this.logInfo(`🔄 Waiting ${delaySeconds}s before retry (${attempt}/${maxAttempts})`);
   }
 
   logFallbackAttempt (operationName) {
-    if (this.logger && typeof this.logger.info === 'function') {
-      this.logger.info(`[${this.options.contextName}] 🔄 Attempting fallback for ${operationName}`);
-    }
+    this.logInfo(`🔄 Attempting fallback for ${operationName}`);
   }
 
   logFallbackFailure (operationName, error) {
-    if (this.logger && typeof this.logger.error === 'function') {
-      this.logger.error(`[${this.options.contextName}] ❌ Fallback failed for ${operationName}: ${error.message}`);
-    }
+    this.log('error', `❌ Fallback failed for ${operationName}: ${error.message}`);
   }
 
   logFallbackUsed (operationName, originalError) {
-    if (this.logger && typeof this.logger.warn === 'function') {
-      this.logger.warn(`[${this.options.contextName}] ⚠️  Using fallback for ${operationName} due to: ${originalError.message}`);
-    }
+    this.logWarn(`⚠️  Using fallback for ${operationName} due to: ${originalError.message}`);
   }
 
   logRecoveryAttempt (operationName, strategyName) {
-    if (this.logger && typeof this.logger.info === 'function') {
-      this.logger.info(`[${this.options.contextName}] 🔧 Attempting recovery for ${operationName} using ${strategyName}`);
-    }
+    this.logInfo(`🔧 Attempting recovery for ${operationName} using ${strategyName}`);
   }
 
   logRecoverySuccess (operationName, strategyName) {
-    if (this.logger && typeof this.logger.info === 'function') {
-      this.logger.info(`[${this.options.contextName}] ✅ Recovery successful for ${operationName} using ${strategyName}`);
-    }
+    this.logInfo(`✅ Recovery successful for ${operationName} using ${strategyName}`);
   }
 
   logRecoveryFailure (operationName, strategyName, error) {
-    if (this.logger && typeof this.logger.warn === 'function') {
-      this.logger.warn(`[${this.options.contextName}] ⚠️  Recovery strategy ${strategyName} failed for ${operationName}: ${error.message}`);
-    }
+    this.logWarn(`⚠️  Recovery strategy ${strategyName} failed for ${operationName}: ${error.message}`);
   }
 
   logAllRecoveryStrategiesFailed (operationName) {
-    if (this.logger && typeof this.logger.error === 'function') {
-      this.logger.error(`[${this.options.contextName}] ❌ All recovery strategies failed for ${operationName}`);
-    }
+    this.log('error', `❌ All recovery strategies failed for ${operationName}`);
   }
 }
 

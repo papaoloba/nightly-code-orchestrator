@@ -19,7 +19,7 @@ The new logging system integrates multiple best-in-class logging libraries:
 ### Basic Usage
 
 ```javascript
-const PrettyLogger = require('./src/pretty-logger');
+const PrettyLogger = require('./src/utils/pretty-logger');
 const logger = new PrettyLogger();
 
 // Display a banner

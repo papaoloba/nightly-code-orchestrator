@@ -1,5 +1,5 @@
 // Jest globals are automatically available
-const { TaskManager } = require('../src/task-manager');
+const { TaskManager } = require('../src/core/task-manager');
 const fs = require('fs-extra');
 const YAML = require('yaml');
 

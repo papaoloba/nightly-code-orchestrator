@@ -1,12 +1,12 @@
-const { Orchestrator } = require('../src/orchestrator');
+const { Orchestrator } = require('../src/core/orchestrator');
 const fs = require('fs-extra');
 
 // Mock all dependencies
-jest.mock('../src/task-manager');
-jest.mock('../src/git-manager');
-jest.mock('../src/validator');
-jest.mock('../src/reporter');
-jest.mock('../src/superclaude-integration');
+jest.mock('../src/core/task-manager');
+jest.mock('../src/integrations/git-manager');
+jest.mock('../src/utils/validator');
+jest.mock('../src/utils/reporter');
+jest.mock('../src/integrations/superclaude-integration');
 jest.mock('fs-extra');
 
 describe('SuperClaude Prompt Optimization', () => {

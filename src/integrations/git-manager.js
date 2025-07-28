@@ -2,7 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const simpleGit = require('simple-git');
 const { spawn } = require('cross-spawn');
-const { TIME } = require('./constants');
+const { TIME } = require('../utils/constants');
 
 class GitManager {
   constructor (options = {}) {
@@ -14,7 +14,11 @@ class GitManager {
       prTemplate: options.prTemplate || null,
       logger: options.logger || console,
       dryRun: options.dryRun || false,
-      prStrategy: options.prStrategy || 'task' // Default to task-based PRs
+      prStrategy: options.prStrategy || 'task', // Default to task-based PRs
+      // Dependency-aware branching configuration
+      dependencyAwareBranching: options.dependencyAwareBranching !== false, // Default enabled
+      mergeDependencyChains: options.mergeDependencyChains || false, // Auto-merge dependency chains
+      strictDependencyChecking: options.strictDependencyChecking || false // Fail if dependencies missing
     };
 
     this.git = simpleGit(this.options.workingDir);
@@ -227,7 +231,7 @@ node_modules/
     }
   }
 
-  async createTaskBranch (task) {
+  async createTaskBranch (task, completedTasksMap = null) {
     if (this.options.prStrategy === 'session') {
       // Legacy behavior: use session branch
       if (!this.sessionBranch) {
@@ -241,8 +245,8 @@ node_modules/
       return this.sessionBranch.branchName;
     }
 
-    // New behavior: create individual task branch
-    const baseBranch = this.determineBaseBranch(task);
+    // New behavior: create individual task branch with dependency awareness
+    const baseBranch = await this.determineDependencyAwareBaseBranch(task, completedTasksMap);
     const taskBranchName = this.generateTaskBranchName(task);
 
     if (this.options.dryRun) {
@@ -250,10 +254,14 @@ node_modules/
         `🔄 Dry run mode - would create task branch: ${taskBranchName}`
       );
       this.options.logger.info(`   └─ Base: ${baseBranch}`);
+      if (task.dependencies && task.dependencies.length > 0) {
+        this.options.logger.info(`   └─ Dependencies: ${task.dependencies.join(', ')}`);
+      }
       this.taskBranches.set(task.id, {
         branchName: taskBranchName,
         baseBranch,
         taskId: task.id,
+        dependencies: task.dependencies || [],
         createdAt: Date.now()
       });
       return taskBranchName;
@@ -263,6 +271,9 @@ node_modules/
     this.options.logger.info('🌿 Creating task branch');
     this.options.logger.info(`   └─ Branch: ${taskBranchName}`);
     this.options.logger.info(`   └─ Base: ${baseBranch}`);
+    if (task.dependencies && task.dependencies.length > 0) {
+      this.options.logger.info(`   └─ Dependencies: ${task.dependencies.join(', ')}`);
+    }
 
     try {
       // Ensure we have an original branch
@@ -275,14 +286,28 @@ node_modules/
       // Ensure we're on the base branch
       await this.git.checkout(baseBranch);
 
+      // If branching from a dependency branch, ensure we have its latest changes
+      if (baseBranch !== this.originalBranch && this.options.mergeDependencyChains) {
+        try {
+          // Pull any updates from the dependency branch if it exists
+          const branches = await this.git.branchLocal();
+          if (branches.all.includes(baseBranch)) {
+            this.options.logger.info(`   └─ Including changes from dependency branch: ${baseBranch}`);
+          }
+        } catch (error) {
+          this.options.logger.warn(`   └─ Warning: Could not verify dependency branch: ${error.message}`);
+        }
+      }
+
       // Create and checkout new task branch
       await this.git.checkoutLocalBranch(taskBranchName);
 
-      // Track the task branch
+      // Track the task branch with dependency information
       this.taskBranches.set(task.id, {
         branchName: taskBranchName,
         baseBranch,
         taskId: task.id,
+        dependencies: task.dependencies || [],
         createdAt: Date.now()
       });
 
@@ -338,6 +363,7 @@ node_modules/
   }
 
   determineBaseBranch (task) {
+    // Legacy synchronous method - kept for backward compatibility
     // Ensure we have an original branch
     if (!this.originalBranch) {
       throw new Error(
@@ -367,6 +393,106 @@ node_modules/
     );
     this.options.logger.error(`❌ ${error.message}`);
     throw error;
+  }
+
+  async determineDependencyAwareBaseBranch (task, completedTasksMap = null) {
+    // Enhanced async method with branch verification and fallback logic
+    // Ensure we have an original branch
+    if (!this.originalBranch) {
+      throw new Error(
+        'Git repository not initialized. Call ensureRepository() first.'
+      );
+    }
+
+    // If no dependencies, use the original branch
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return this.originalBranch;
+    }
+
+    // If dependency branching is disabled, use original branch
+    if (this.options.dependencyAwareBranching === false) {
+      this.options.logger.info(
+        `ℹ️  Dependency-aware branching disabled, using ${this.originalBranch} for task ${task.id}`
+      );
+      return this.originalBranch;
+    }
+
+    // Find the most recent completed dependency
+    let baseBranch = this.originalBranch;
+    let foundDependencyBranch = false;
+    const missingDependencies = [];
+
+    // Iterate through dependencies in reverse order (most recent first)
+    for (let i = task.dependencies.length - 1; i >= 0; i--) {
+      const depId = task.dependencies[i];
+
+      // Check if the dependency task has been completed
+      const depBranchInfo = this.taskBranches.get(depId);
+
+      if (depBranchInfo) {
+        // Verify the branch still exists
+        try {
+          const branches = await this.git.branchLocal();
+          if (branches.all.includes(depBranchInfo.branchName)) {
+            baseBranch = depBranchInfo.branchName;
+            foundDependencyBranch = true;
+            this.options.logger.info(
+              `🔗 Task ${task.id} will branch from dependency ${depId} (${depBranchInfo.branchName})`
+            );
+            break;
+          } else {
+            this.options.logger.warn(
+              `⚠️  Dependency branch ${depBranchInfo.branchName} no longer exists, checking next dependency`
+            );
+          }
+        } catch (error) {
+          this.options.logger.warn(
+            `⚠️  Could not verify dependency branch: ${error.message}`
+          );
+        }
+      } else {
+        missingDependencies.push(depId);
+      }
+
+      // Also check completed tasks map if provided
+      if (completedTasksMap && completedTasksMap.has(depId)) {
+        const completedTask = completedTasksMap.get(depId);
+        if (completedTask.branchName) {
+          try {
+            const branches = await this.git.branchLocal();
+            if (branches.all.includes(completedTask.branchName)) {
+              baseBranch = completedTask.branchName;
+              foundDependencyBranch = true;
+              this.options.logger.info(
+                `🔗 Task ${task.id} will branch from completed dependency ${depId} (${completedTask.branchName})`
+              );
+              break;
+            }
+          } catch (error) {
+            this.options.logger.warn(
+              `⚠️  Could not verify completed task branch: ${error.message}`
+            );
+          }
+        }
+      }
+    }
+
+    // If strict dependency checking is enabled and dependencies are missing, throw error
+    if (this.options.strictDependencyChecking && missingDependencies.length > 0 && !foundDependencyBranch) {
+      const error = new Error(
+        `Task ${task.id} has unresolved dependencies: ${missingDependencies.join(', ')}`
+      );
+      this.options.logger.error(`❌ ${error.message}`);
+      throw error;
+    }
+
+    if (!foundDependencyBranch && task.dependencies.length > 0) {
+      this.options.logger.warn(
+        `⚠️  No dependency branches found for task ${task.id}, using ${this.originalBranch} as base`
+      );
+    }
+
+    return baseBranch;
   }
 
   async pullLatestChanges () {

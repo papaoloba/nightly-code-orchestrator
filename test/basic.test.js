@@ -1,12 +1,12 @@
 describe('Basic Package Tests', () => {
   it('should load the main module without errors', () => {
     expect(() => {
-      require('../src/index.js');
+      require('../src/core/index.js');
     }).not.toThrow();
   });
 
   it('should export expected classes', () => {
-    const pkg = require('../src/index.js');
+    const pkg = require('../src/core/index.js');
 
     expect(pkg.Orchestrator).toBeDefined();
     expect(pkg.TaskManager).toBeDefined();
@@ -25,7 +25,7 @@ describe('Basic Package Tests', () => {
   });
 
   it('should be able to create class instances', () => {
-    const { TaskManager, GitManager, Validator, Reporter } = require('../src/index.js');
+    const { TaskManager, GitManager, Validator, Reporter } = require('../src/core/index.js');
 
     expect(() => new TaskManager()).not.toThrow();
     expect(() => new GitManager()).not.toThrow();

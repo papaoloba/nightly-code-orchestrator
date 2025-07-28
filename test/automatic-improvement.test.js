@@ -1,4 +1,4 @@
-const { Orchestrator } = require('../src/orchestrator');
+const { Orchestrator } = require('../src/core/orchestrator');
 
 describe('Automatic Improvement Feature', () => {
   let orchestrator;
@@ -59,7 +59,7 @@ describe('Automatic Improvement Feature', () => {
       orchestrator.createAutomaticImprovementTask = jest.fn().mockResolvedValue({
         id: 'auto-improve-123',
         title: 'Automatic Code Improvement',
-        estimated_duration: 30
+        minimum_duration: 30
       });
 
       orchestrator.executeAutomaticImprovementTask = jest.fn().mockResolvedValue({
@@ -110,7 +110,7 @@ describe('Automatic Improvement Feature', () => {
 
       expect(task.id).toMatch(/^auto-improve-\d+$/);
       expect(task.requirements).toContain('Time available: 29 minutes'); // 30 - 1 minute buffer
-      expect(task.estimated_duration).toBe(29);
+      expect(task.minimum_duration).toBe(29);
     });
 
     it('should limit improvement duration to maximum 1 hour', async () => {
@@ -118,13 +118,13 @@ describe('Automatic Improvement Feature', () => {
 
       const task = await orchestrator.createAutomaticImprovementTask(remainingTime);
 
-      expect(task.estimated_duration).toBe(60); // Should be capped at 1 hour
+      expect(task.minimum_duration).toBe(60); // Should be capped at 1 hour
     });
   });
 
   describe('executeAutomaticImprovementTask', () => {
     it('should use SuperClaude command when available', async () => {
-      const task = { estimated_duration: 30 };
+      const task = { minimum_duration: 30 };
 
       // Set dry run to false for this test
       orchestrator.options.dryRun = false;
@@ -157,7 +157,7 @@ describe('Automatic Improvement Feature', () => {
     });
 
     it('should fallback to standard approach when SuperClaude unavailable', async () => {
-      const task = { estimated_duration: 30 };
+      const task = { minimum_duration: 30 };
 
       // Set dry run to false for this test
       orchestrator.options.dryRun = false;
@@ -184,7 +184,7 @@ describe('Automatic Improvement Feature', () => {
     });
 
     it('should handle dry run mode', async () => {
-      const task = { estimated_duration: 30 };
+      const task = { minimum_duration: 30 };
       orchestrator.options.dryRun = true;
 
       const result = await orchestrator.executeAutomaticImprovementTask(task);

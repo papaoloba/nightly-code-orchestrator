@@ -4,7 +4,7 @@
  * Example of integrating PrettyLogger into the nightly-code orchestrator
  */
 
-const PrettyLogger = require('../src/pretty-logger');
+const PrettyLogger = require('../src/utils/pretty-logger');
 const chalk = require('chalk');
 
 // Initialize the pretty logger
