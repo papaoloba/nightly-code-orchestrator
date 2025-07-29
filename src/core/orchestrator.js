@@ -101,6 +101,9 @@ class Orchestrator extends EventEmitter {
     // Initialize pretty logger for enhanced UI
     this.prettyLogger = new PrettyLogger();
 
+    // Set spinner to quiet mode when pretty logger is active
+    spinner.setQuietMode(true);
+
     this.setupLogging();
     this.setupComponents();
   }
@@ -1136,12 +1139,31 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
     try {
       if (this.options.dryRun) {
-        this.logInfo('🔄 Dry run mode - skipping actual execution');
+        this.logInfo('🔄 Dry run mode - simulating Claude Code execution');
+        
+        // Mock Claude Code execution with spinner updates
+        spinner.start('🤖 Claude Code is starting...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        spinner.update('🧠 Analyzing task requirements...');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        spinner.update('📝 Planning execution strategy...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        spinner.update('⚡ Simulating code generation...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        spinner.update('🔍 Validating generated code...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        spinner.succeed('✅ Claude Code dry run completed successfully');
+        
         return {
           success: true,
-          output: 'Dry run - task not actually executed',
+          output: 'Dry run - task simulation completed',
           filesChanged: [],
-          duration: 0
+          duration: 6500
         };
       }
 
