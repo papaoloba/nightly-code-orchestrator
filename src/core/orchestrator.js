@@ -80,7 +80,12 @@ class Orchestrator extends EventEmitter {
       rateLimitRetries: options.rateLimitRetries || RETRY.DEFAULT_RETRIES,
       rateLimitBaseDelay:
         options.rateLimitBaseDelay || TIME.MS.RATE_LIMIT_BASE_DELAY,
-      enableRetryOnLimits: options.enableRetryOnLimits !== false // Default to true
+      enableRetryOnLimits: options.enableRetryOnLimits !== false, // Default to true
+      usageLimitRetry: options.usageLimitRetry !== false, // Default to true
+      rateLimitRetry: options.rateLimitRetry !== false, // Default to true
+      exponentialBackoff: options.exponentialBackoff !== false, // Default to true
+      jitter: options.jitter !== false, // Default to true
+      maxDelay: options.maxDelay || 18000000 // 5 hours for usage limits
     };
 
     this.state = {
@@ -1466,13 +1471,18 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
                 baseDelay,
                 errorType
               );
+              const delayMinutes = Math.round(delay / 60000);
+              const delayHours = Math.floor(delayMinutes / 60);
+              const remainingMinutes = delayMinutes % 60;
+              const timeDisplay = delayHours > 0 
+                ? `${delayHours}h ${remainingMinutes}m` 
+                : `${delayMinutes} minutes`;
+              
               this.logWarn(
-                `🔄 Usage limit encountered. Waiting ${Math.round(
-                  delay / TIME.MS.ONE_SECOND
-                )}s before retry (attempt ${attempt + 1}/${maxRetries})...`
+                `🔄 Usage limit encountered. Waiting ${timeDisplay} before retry (attempt ${attempt + 1}/${maxRetries})...`
               );
 
-              spinner.update(`⏳ Waiting ${Math.round(delay / TIME.MS.ONE_SECOND)}s before retry...`);
+              spinner.update(`⏳ Waiting ${timeDisplay} before retry...`);
               // Keep session alive during wait
               await this.waitWithProgress(delay, errorType);
               spinner.update('🔄 Retrying Claude Code task...');
@@ -1808,6 +1818,35 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
   classifyError (error) {
     const errorMessage = error.message.toLowerCase();
+
+    // Try to extract JSON content from error message if present
+    let jsonError = null;
+    try {
+      // Look for JSON content in the error message
+      const jsonMatch = error.message.match(/\{.*\}/);
+      if (jsonMatch) {
+        jsonError = JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      // Ignore JSON parsing errors
+    }
+
+    // Check if the JSON contains usage limit information
+    if (jsonError && jsonError.result) {
+      const result = jsonError.result.toLowerCase();
+      if (result.includes('claude ai usage limit')) {
+        // Extract timestamp if available
+        const timestampMatch = jsonError.result.match(/\|(\d+)$/);
+        if (timestampMatch) {
+          const resetTimestamp = parseInt(timestampMatch[1]);
+          const resetDate = new Date(resetTimestamp * 1000);
+          this.logInfo(`🕐 Usage limit will reset at: ${resetDate.toLocaleString()}`);
+          // Store the reset timestamp for delay calculation
+          error.resetTimestamp = resetTimestamp;
+        }
+        return 'USAGE_LIMIT';
+      }
+    }
 
     // Usage limit patterns
     const usageLimitPatterns = [
