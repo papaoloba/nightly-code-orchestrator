@@ -74,6 +74,7 @@ class TaskManager {
       requirements: Joi.string().required(),
       acceptance_criteria: Joi.array().items(Joi.string()).default([]),
       minimum_duration: Joi.number().integer().min(1).max(480).optional(), // minutes
+      timeout_minutes: Joi.number().integer().min(5).max(240).optional(), // 5 min to 4 hours
       dependencies: Joi.array().items(Joi.string()).default([]),
       tags: Joi.array().items(Joi.string()).default([]),
       files_to_modify: Joi.array().items(Joi.string()).default([]),
@@ -270,6 +271,23 @@ class TaskManager {
         taskId: task.id,
         duration: task.minimum_duration
       });
+    }
+
+    // Timeout validation
+    if (task.timeout_minutes) {
+      if (task.timeout_minutes < 10) {
+        this.logWarn('Task has very short timeout', {
+          taskId: task.id,
+          timeout: task.timeout_minutes,
+          recommendation: 'Consider using at least 10 minutes for most tasks'
+        });
+      } else if (task.timeout_minutes > 120) {
+        this.logWarn('Task has very long timeout', {
+          taskId: task.id,
+          timeout: task.timeout_minutes,
+          recommendation: 'Consider if the task needs more than 2 hours'
+        });
+      }
     }
   }
 

@@ -1119,15 +1119,18 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
 
   async executeTask (task) {
     // For tasks with minimum_duration, we'll iteratively prompt Claude until minimum time is reached
-    // IMPORTANT: Each iteration gets the full 60-minute timeout to allow natural task completion
+    // IMPORTANT: Each iteration gets the timeout specified by timeout_minutes (or default 60 minutes)
     // The minimum_duration controls iteration count, NOT the timeout per iteration
     const hasMinimumDuration =
       task.minimum_duration && task.minimum_duration > 0;
     const minimumDurationMs = task.minimum_duration
       ? task.minimum_duration * 60 * TIME.MS.ONE_SECOND
       : 0;
-    const baseTimeoutMs =
-      TIME.SECONDS.DEFAULT_TASK_DURATION_MINUTES * 60 * TIME.MS.ONE_SECOND;
+    
+    // Use task-specific timeout if provided, otherwise use default
+    const baseTimeoutMs = task.timeout_minutes
+      ? task.timeout_minutes * 60 * TIME.MS.ONE_SECOND
+      : TIME.SECONDS.DEFAULT_TASK_DURATION_MINUTES * 60 * TIME.MS.ONE_SECOND;
 
     const totalStartTime = Date.now();
     let totalOutput = '';
@@ -1188,7 +1191,7 @@ Time available: ${Math.round(improvementDuration / 60)} minutes`,
           break;
         }
 
-        // Always use standard timeout for each iteration
+        // Use the configured timeout for each iteration
         const iterationTimeoutMs = baseTimeoutMs;
 
         const iterationTimeoutMinutes = Math.round(
