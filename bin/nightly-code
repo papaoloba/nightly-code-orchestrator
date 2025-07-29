@@ -3,12 +3,13 @@
 const { program } = require('commander');
 const chalk = require('chalk');
 const path = require('path');
+const os = require('os');
 const fs = require('fs-extra');
 
 const { Orchestrator } = require('../src/core/orchestrator');
 const { Reporter } = require('../src/utils/reporter');
 const { Validator } = require('../src/utils/validator');
-const { TaskDescriptor } = require('../src/core/task-descriptor');
+// const { TaskDescriptor } = require('../src/core/task-descriptor'); // Not needed with Claude
 const spinner = require('../src/utils/spinner');
 const packageJson = require('../package.json');
 
@@ -356,19 +357,30 @@ program
 
 program
   .command('describe')
-  .description('Describe work to be done in natural language and generate nightly-tasks.yaml')
+  .description('Use Claude to generate well-formatted nightly-tasks.yaml from natural language descriptions')
   .option('-o, --output <file>', 'Output file path', 'nightly-tasks.yaml')
   .option('-i, --interactive', 'Interactive mode for entering multiple tasks')
   .option('-f, --file <path>', 'Read descriptions from a text file')
   .option('--append', 'Append to existing tasks file instead of overwriting')
+  .option('-n, --count <number>', 'Desired number of output tasks (Claude will split/merge as needed)')
+  .option('--dry-run', 'Preview generated tasks without writing to file')
   .action(async (options) => {
     try {
-      log.info('📝 Task Description Mode');
+      log.info('📝 Claude-Powered Task Description Mode');
       log.plain(chalk.gray(
-        'Describe the work to be done in natural language. Claude will convert it into optimized tasks.\n'
+        'Describe your tasks in natural language. Claude will generate a well-formatted nightly-tasks.yaml file.\n'
       ));
 
-      const taskDescriptor = new TaskDescriptor();
+      // Check for Claude Code installation
+      const { execSync } = require('child_process');
+      try {
+        execSync('which claude', { stdio: 'ignore' });
+      } catch (error) {
+        log.error('Claude Code CLI not found. Please install it first:');
+        log.plain(chalk.gray('  npm install -g claude-code'));
+        process.exit(1);
+      }
+
       const { input, editor, confirm } = require('@inquirer/prompts');
       let descriptions = [];
 
@@ -442,105 +454,129 @@ program
         process.exit(1);
       }
 
-      // Process descriptions with automatic splitting
+      // Call Claude to generate and save YAML directly
       const progress = spinner.createProgress([
-        'Processing task descriptions',
-        'Applying auto-splitting logic',
-        'Generating optimized tasks',
-        'Writing output file'
+        'Calling Claude to generate YAML'
       ]);
 
-      // Track splitting results
-      let totalTasks = 0;
-      let splitCount = 0;
+      // Build the prompt for Claude
+      let prompt = `Generate a well-formatted nightly-tasks.yaml file for the following task descriptions.
 
-      progress.next();
-      let yamlContent;
+Requirements:
+- Convert each description into a properly structured task
+- Automatically detect task type (feature, bugfix, refactor, test, docs, performance, security)
+- Set appropriate priority (1-10) based on urgency keywords
+- Generate meaningful task IDs
+- Add relevant tags based on content
+- Estimate duration in minutes
+- Create clear acceptance criteria
+- Split complex tasks into smaller subtasks if needed
+- Output ONLY the YAML content, no explanations or markdown code blocks
+- Format as valid YAML that can be saved directly to a file
+
+`;
 
       if (options.append && await fs.pathExists(options.output)) {
-        // Load existing tasks
         const existingContent = await fs.readFile(options.output, 'utf8');
-        const YAML = require('yaml');
-        const existing = YAML.parse(existingContent);
-
-        // Add new tasks with automatic splitting
-        const newTasks = [];
-        descriptions.forEach(desc => {
-          const result = taskDescriptor.parseDescription(desc);
-          if (Array.isArray(result)) {
-            // Task was split
-            splitCount++;
-            result.forEach(task => newTasks.push(taskDescriptor.optimizeTask(task)));
-          } else {
-            // Single task
-            newTasks.push(taskDescriptor.optimizeTask(result));
-          }
-        });
-        totalTasks = newTasks.length;
-
-        existing.tasks = existing.tasks.concat(newTasks);
-
-        // Sort all tasks by priority
-        existing.tasks.sort((a, b) => b.priority - a.priority);
-
-        yamlContent = YAML.stringify(existing, {
-          indent: 2,
-          lineWidth: 0
-        });
-      } else {
-        // Generate new file with splitting tracking
-        yamlContent = taskDescriptor.generateTasksYaml(descriptions);
-        const YAML = require('yaml');
-        const parsedContent = YAML.parse(yamlContent);
-        totalTasks = parsedContent.tasks.length;
-        splitCount = parsedContent.metadata?.auto_split_applied ? 1 : 0;
+        prompt += 'IMPORTANT: Append these new tasks to the existing file below, ' +
+          `maintaining the same format and structure:\n\n${existingContent}\n\n`;
       }
 
-      // Write output
-      await fs.writeFile(options.output, yamlContent);
-      log.success(`\n✅ Tasks written to ${options.output}`);
+      prompt += 'Task Descriptions:\n';
+      descriptions.forEach((desc, index) => {
+        prompt += `\n${index + 1}. ${desc}\n`;
+      });
 
-      // Show splitting summary
-      if (splitCount > 0) {
-        log.detail(
-          `🔄 Auto-split applied: ${splitCount} complex descriptions split into ${totalTasks} tasks`
-        );
+      prompt += `\nGenerate a complete, valid YAML file with proper structure. Include:
+- version: '1.0'
+- created_at: current timestamp
+- tasks: array of task objects
+- metadata: summary information
+
+Each task should have: id, type, priority, title, requirements, acceptance_criteria, ` +
+      'minimum_duration, dependencies, tags, files_to_modify, enabled\n\n' +
+      'Output ONLY the YAML content, nothing else.';
+
+      if (options.count) {
+        const taskCount = parseInt(options.count);
+        if (taskCount > 0) {
+          prompt += `\n\nIMPORTANT: Generate exactly ${taskCount} tasks. ` +
+            `If the descriptions are too simple, expand them into ${taskCount} detailed subtasks. ` +
+            `If there are too many descriptions, intelligently combine or prioritize to create ${taskCount} tasks.`;
+        }
       }
 
-      // Show summary
-      const YAML = require('yaml');
-      const tasks = YAML.parse(yamlContent).tasks;
-      log.heading('\n📊 Task Summary:');
+      progress.next();
 
-      tasks.forEach((task, index) => {
-        const priority = task.priority >= 8
-          ? chalk.red(`[P${task.priority}]`)
-          : task.priority >= 6
-            ? chalk.yellow(`[P${task.priority}]`)
-            : chalk.green(`[P${task.priority}]`);
-        log.plain(`${index + 1}. ${priority} ${task.title}`);
-        log.plain(
-          `   Type: ${chalk.cyan(task.type)}, Min Duration: ${chalk.cyan(task.minimum_duration ? `${task.minimum_duration} min` : 'none')}, ` +
-          `Tags: ${chalk.gray(task.tags.join(', '))}`
-        );
-      });
+      // Call Claude directly and save the output
+      const { exec } = require('child_process');
+      const util = require('util');
+      const execPromise = util.promisify(exec);
 
-      const totalDuration = tasks.reduce((sum, task) => sum + (task.minimum_duration || 0), 0);
-      log.divider();
-      log.info(
-        `Total estimated duration: ${Math.round(totalDuration / 60)} hours ${totalDuration % 60} minutes`
-      );
+      try {
+        const outputPath = path.resolve(options.output);
 
-      // Show task IDs for reference
-      log.plain(chalk.gray('\nTask IDs for reference:'));
-      tasks.slice(0, 5).forEach(task => {
-        log.plain(chalk.gray(`  ${task.id}`));
-      });
-      if (tasks.length > 5) {
-        log.plain(chalk.gray(`  ... and ${tasks.length - 5} more`));
+        // Create temporary prompt file
+        const tempPromptFile = path.join(os.tmpdir(), `nightly-describe-${Date.now()}.txt`);
+        await fs.writeFile(tempPromptFile, prompt);
+
+        // Call Claude and save output directly
+        const claudeCommand = options.dryRun
+          ? `claude < "${tempPromptFile}"`
+          : `claude < "${tempPromptFile}" > "${outputPath}"`;
+
+        const { stdout, stderr } = await execPromise(claudeCommand, {
+          maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+        });
+
+        // Clean up temp file
+        try {
+          await fs.unlink(tempPromptFile);
+        } catch (e) {}
+
+        if (stderr && !stderr.includes('Warning')) {
+          log.warn(`Claude warnings: ${stderr}`);
+        }
+
+        progress.complete();
+
+        if (options.dryRun) {
+          log.info('\n🔍 DRY RUN - Preview mode (no files written)');
+          log.heading('\nGenerated YAML:');
+          log.plain(chalk.gray('─'.repeat(60)));
+          log.plain(stdout);
+          log.plain(chalk.gray('─'.repeat(60)));
+          log.info('\nTo save this output, run the command without --dry-run');
+        } else {
+          log.success(`\n✅ Tasks written to ${options.output}`);
+          log.info('\nRun the following command to view the generated tasks:');
+          log.plain(chalk.gray(`  cat ${options.output}`));
+          log.plain(chalk.gray('  # or'));
+          log.plain(chalk.gray('  nightly-code validate'));
+        }
+      } catch (error) {
+        progress.fail();
+        if (error.message.includes('claude: command not found')) {
+          log.error('Claude CLI not found. Please install it:');
+          log.plain(chalk.gray('  npm install -g @anthropic-ai/claude-cli'));
+        } else {
+          log.errorWithDetail('Failed to generate tasks with Claude:', error);
+        }
+        process.exit(1);
       }
     } catch (error) {
-      log.errorWithDetail('❌ Task description failed:', error);
+      // Enhanced error handling
+      if (error.message.includes('claude: command not found')) {
+        log.error('Claude Code CLI not found. Please install it:');
+        log.plain(chalk.gray('  npm install -g @anthropic-ai/claude-cli'));
+      } else if (error.message.includes('YAML')) {
+        log.error('Failed to parse Claude\'s response as valid YAML');
+        log.plain(chalk.gray('Try running with --dry-run to see the raw output'));
+      } else if (error.code === 'ENOENT') {
+        log.error(`File not found: ${error.path}`);
+      } else {
+        log.errorWithDetail('❌ Task description failed:', error);
+      }
       process.exit(1);
     }
   });
