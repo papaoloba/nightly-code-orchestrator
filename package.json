@@ -14,11 +14,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "lint": "eslint src/**/*.js bin/nightly-code scripts/**/*.js test/**/*.js",
-    "lint:fix": "eslint src/**/*.js bin/nightly-code scripts/**/*.js test/**/*.js --fix",
+    "lint": "eslint src/**/*.js bin/nightly-code test/**/*.js",
+    "lint:fix": "eslint src/**/*.js bin/nightly-code test/**/*.js --fix",
     "build": "echo 'Build step placeholder'",
-    "prepare": "echo 'Prepare step placeholder'",
-    "postinstall": "node scripts/install-hooks.js"
+    "prepare": "echo 'Prepare step placeholder'"
   },
   "keywords": [
     "claude-code",
@@ -57,7 +56,6 @@
     "fs-extra": "^11.1.0",
     "@inquirer/prompts": "^5.3.8",
     "joi": "^17.9.0",
-    "node-cron": "^3.0.2",
     "nodemailer": "^6.9.0",
     "ora": "^5.4.1",
     "pidusage": "^3.0.0",
@@ -86,7 +84,6 @@
     "bin/",
     "src/",
     "templates/",
-    "scripts/",
     "superclaude/",
     "README.md",
     "LICENSE",

@@ -65,11 +65,6 @@ This project adheres to a code of conduct adapted from the [Contributor Covenant
    npm run lint
    ```
 
-4. Set up git hooks (optional but recommended):
-   ```bash
-   npm run prepare
-   ```
-
 ## Contributing Guidelines
 
 ### Types of Contributions

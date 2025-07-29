@@ -18,7 +18,6 @@ The Nightly Code Orchestrator transforms your development workflow by automating
 - **📝 Commit message convention** for task tracking
 - **✅ Comprehensive validation** system for code quality
 - **📊 Detailed reporting** and notifications
-- **⏰ Cross-platform scheduling** (cron, Task Scheduler)
 - **🔒 Security-first** approach with sandboxing options
 - **🏗️ Production-ready** with extensive error handling
 - **🧠 SuperClaude integration** for automatic prompt optimization
@@ -63,8 +62,6 @@ nightly-code validate
 # Test with a dry run
 nightly-code run --dry-run
 
-# Schedule automated sessions
-nightly-code schedule
 ```
 
 #### If installed locally as a dev dependency:
@@ -85,8 +82,6 @@ npx nightly-code validate
 # Test with a dry run
 npx nightly-code run --dry-run
 
-# Schedule automated sessions
-npx nightly-code schedule
 ```
 
 **Note:** When installed locally, you can either:
@@ -138,7 +133,7 @@ notifications:
   
   slack:
     enabled: false
-    # webhook_url: "https://hooks.slack.com/services/..."
+    # webhook_url: "https://your-webhook-url.com/..."
 
 # SuperClaude Framework integration
 superclaude:
@@ -254,25 +249,6 @@ npx nightly-code run --resume checkpoint-123
 - `--max-duration` - Maximum duration in minutes
 - `--dry-run` - Validate without executing
 - `--resume` - Resume from checkpoint
-
-### `nightly-code schedule`
-
-Set up automated scheduling.
-
-```bash
-# If installed globally
-nightly-code schedule
-nightly-code schedule --cron "0 22 * * *" --timezone "America/New_York"
-
-# If installed locally
-npx nightly-code schedule
-npx nightly-code schedule --cron "0 22 * * *" --timezone "America/New_York"
-```
-
-**Options:**
-- `--cron, -c` - Cron expression for scheduling
-- `--timezone, -t` - Timezone for scheduling
-- `--dry-run` - Show what would be scheduled
 
 ### `nightly-code status`
 
@@ -502,8 +478,6 @@ validateAuth().catch(error => {
 name: Nightly Code Session
 
 on:
-  schedule:
-    - cron: '0 2 * * *'  # 2 AM UTC daily
   workflow_dispatch:
 
 jobs:
@@ -574,7 +548,7 @@ For implementing new functionality:
   requirements: |
     Integrate Stripe payment processing with:
     - Payment form with validation
-    - Webhook handling for payment events
+    - Event handling for payment processing
     - Error handling and retry logic
     - Invoice generation
   
@@ -582,7 +556,7 @@ For implementing new functionality:
     - "Payment form accepts credit cards"
     - "Successful payments create invoices"
     - "Failed payments show appropriate errors"
-    - "Webhook events are processed correctly"
+    - "Payment events are processed correctly"
   
   minimum_duration: 240
   tags: ["backend", "payments", "integration"]
@@ -718,22 +692,6 @@ git log --grep="Task-Status: completed" --pretty=format:"%h %s %ad" --date=short
 # Export task report
 git log --grep="Task-Status: completed" --pretty=format:"%h|%s|%ad" --date=short > tasks.csv
 ```
-
-### Git Hook Installation
-
-Install the commit-msg hook to validate task commits:
-
-```bash
-# Copy hook to your git directory
-cp node_modules/@papaoloba/nightly-code-orchestrator/hooks/commit-msg .git/hooks/
-chmod +x .git/hooks/commit-msg
-```
-
-The hook validates:
-- Proper commit format for task completions
-- Required metadata in commit footer
-- Task ID format and consistency
-- Conventional commit compliance
 
 ## Security and Safety
 
@@ -945,7 +903,6 @@ Logs are stored in `.nightly-code/logs/`:
 
 - `nightly-code.log` - General application logs
 - `sessions.log` - Detailed session logs
-- `scheduler.log` - Scheduling and cron logs
 
 ## Best Practices
 

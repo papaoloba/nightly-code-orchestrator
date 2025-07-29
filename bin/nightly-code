@@ -101,33 +101,6 @@ program
   });
 
 program
-  .command('schedule')
-  .description('Set up automated scheduling (cron/Task Scheduler)')
-  .option('-c, --cron <expression>', 'Cron expression for scheduling', '0 22 * * *')
-  .option('-t, --timezone <tz>', 'Timezone for scheduling', 'UTC')
-  .option('--dry-run', 'Show what would be scheduled without creating it')
-  .action(async (options) => {
-    try {
-      log.info('⏰ Setting up automated scheduling...');
-
-      const setupScript = require('../scripts/setup-cron');
-      await setupScript.configure({
-        cron: options.cron,
-        timezone: options.timezone,
-        dryRun: options.dryRun
-      });
-
-      if (!options.dryRun) {
-        log.success('✅ Scheduling configured successfully!');
-        log.warn(`Next run: ${options.cron} (${options.timezone})`);
-      }
-    } catch (error) {
-      log.errorWithDetail('❌ Scheduling setup failed:', error);
-      process.exit(1);
-    }
-  });
-
-program
   .command('run')
   .description('Execute a single coding session manually')
   .option('-c, --config <path>', 'Path to configuration file', 'nightly-code.yaml')
