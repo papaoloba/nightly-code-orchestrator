@@ -40,6 +40,10 @@ yarn-error.log*
 dist/
 build/
 
+# Test coverage
+coverage/
+*.lcov
+
 # IDE files
 *.swp
 *.swo
